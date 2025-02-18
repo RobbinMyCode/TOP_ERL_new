@@ -106,6 +106,49 @@ Wait for 10 min until finish (depend on the internet speed)
 
 10. We used [cw2](https://pypi.org/project/cw2/) to parse our experiment configs into sbatch commands in slurm based HPC system. For more technical details, we refer the documents in cw2.
 
+
+&nbsp;
+## Cite
+If our work benefits your research, please consider citing our paper:
+```markdown
+@inproceedings{
+li2025toperl,
+title={{TOP}-{ERL}: Transformer-based Off-Policy Episodic Reinforcement Learning},
+author={Ge Li and Dong Tian and Hongyi Zhou and Xinkai Jiang and Rudolf Lioutikov and Gerhard Neumann},
+booktitle={The Thirteenth International Conference on Learning Representations},
+year={2025},
+url={https://openreview.net/forum?id=N4NhVN30ph}
+}
+
+```
+
+Our previous work for online RL with temporal correlation and movement primitives can be found in the following papers
+[TCE](https://github.com/BruceGeLi/TCE_RL), ICLR 24:
+```markdown
+@inproceedings{
+li2024open,
+title={Open the Black Box: Step-based Policy Updates for Temporally-Correlated Episodic Reinforcement Learning},
+author={Ge Li and Hongyi Zhou and Dominik Roth and Serge Thilges and Fabian Otto and Rudolf Lioutikov and Gerhard Neumann},
+booktitle={The Twelfth International Conference on Learning Representations},
+year={2024},
+url={https://openreview.net/forum?id=mnipav175N}
+}
+}
+```
+
+The ProDMP concept can be found in the following paper
+[ProDMP](https://github.com/ALRhub/MP_PyTorch/blob/main/README.md), IEEE RA-L:
+```markdown
+@article{li2023prodmp,
+  title={ProDMP: A Unified Perspective on Dynamic and Probabilistic Movement Primitives},
+  author={Li, Ge and Jin, Zeqi and Volpp, Michael and Otto, Fabian and Lioutikov, Rudolf and Neumann, Gerhard},
+  journal={IEEE Robotics and Automation Letters},
+  year={2023},
+  publisher={IEEE}
+}
+
+```
+
 <br><br>
 ### References
 [1] Darrell Whitley, Stephen Dominic, Rajarshi Das, and Charles W Anderson. Genetic reinforcement learning for neurocontrol problems. Machine Learning, 13:259–284, 1993.
