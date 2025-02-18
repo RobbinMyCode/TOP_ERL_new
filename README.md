@@ -1,5 +1,4 @@
-# Transformer-based Off-policy Episodic RL (TOP-ERL)
-### Under review in ICLR25
+# TOP-ERL: Transformer-based Off-policy Episodic RL (ICLR25 Spotlight)
 
 <p align="center">
   <img src='./web_assets/Metaworld.gif' width="200" />
@@ -78,7 +77,7 @@ We provide a 12 min long [tutorial video](https://www.youtube.com/watch?v=y-d1E0
 ```
 4. Install dependencies
 ```
-    cd TOP_ERL
+    cd TOP_ERL_ICLR25_Code
     bash conda_env.sh	
 ```
 Wait for 10 min until finish (depend on the internet speed)
@@ -97,10 +96,13 @@ Wait for 10 min until finish (depend on the internet speed)
 
 8. Run experiment locally, e.g. box pushing dense reward setting
 ```
-  python seq_mp_exp_multiprocessing.py config/box_push_random_init/seq/entire/local.yaml -o --nocodecopy
+  python seq_mp_exp_multiprocessing.py config/box_push_random_init/seq/entire/local_dense.yaml -o --nocodecopy
 ```
 
-9. To run experiments in slurm-based HPC, you need to adapt your hpc info in our hpc configs. 
+9. To run experiments in slurm-based HPC, you need to adapt your hpc info in our slurm configs. An example of running code in slurm is:
+```
+  python seq_mp_exp_multiprocessing.py config/box_push_random_init/seq/entire/slurm_dense.yaml -o --nocodecopy
+```
 
 10. We used [cw2](https://pypi.org/project/cw2/) to parse our experiment configs into sbatch commands in slurm based HPC system. For more technical details, we refer the documents in cw2.
 
