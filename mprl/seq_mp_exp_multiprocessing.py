@@ -57,6 +57,12 @@ class MPExperimentMultiProcessing(experiment.AbstractIterativeExperiment):
 
         # Get experiment config
         cfg = cw_config["params"]
+
+
+        #add split arguments to sampler + critic as they will call the reference point splitting in the policy (which does not need prior information for it)
+        cfg["sampler"]["args"]["reference_split"] = cfg["reference_split"]
+        cfg["critic"]["args"]["reference_split"] = cfg["reference_split"]
+
         cpu_cores = cw_config.get("cpu_cores", None)
         if cpu_cores is None:
             cpu_cores = set(range(psutil.cpu_count(logical=True)))

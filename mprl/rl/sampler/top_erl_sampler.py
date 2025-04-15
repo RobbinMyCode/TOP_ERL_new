@@ -27,6 +27,9 @@ class TopErlSampler(BlackBoxSampler):
         self._dt = self.debug_env.envs[0].dt
         self._num_times = self.debug_env.envs[0].spec.max_episode_steps
 
+        #get reference split args
+        self.reference_split_args = kwargs.get("reference_split", {'split_strategy': 'fixed_max_size', 'split_size': 1e100})
+
         # If episode is too long, such as Metaworld, we can down sample the
         # trajectory when update the policy and critic
         self.traj_downsample_factor = kwargs.get("traj_downsample_factor", None)
@@ -191,7 +194,8 @@ class TopErlSampler(BlackBoxSampler):
                                          init_time=episode_init_time,
                                          init_pos=episode_init_pos,
                                          init_vel=episode_init_vel,
-                                         use_mean=deterministic)
+                                         use_mean=deterministic,
+                                         split_args=self.reference_split_args)
 
             assert_shape(step_actions, [num_env, num_times, num_dof * 2])
             list_step_actions.append(step_actions)

@@ -4,7 +4,7 @@
 eval "$(conda shell.bash hook)"
 
 # Define environment name and Python version
-ENV_NAME=top_erl_iclr25
+ENV_NAME=top_erl_NEW
 PYTHON_VERSION=3.11
 
 # Create a new conda environment

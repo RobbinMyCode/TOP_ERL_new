@@ -185,7 +185,13 @@ class CriticGPT(nn.Module):
         if actions is not None:
             action_emd = self.transformer.action_encoder(actions)
 
+            # TODO: the next squeeze is experimental and may cause issues, (once the shape is 512,7,1,16,128 while it needs to be 512,7,16,128)
+            if len(action_emd.size()) > len(state_emd.size()):
+                action_emd = action_emd.squeeze()
+
+
             # Shape [*add_dim, num_actions + 1, n_embed]
+
             seq_emb = torch.cat([state_emd, action_emd], dim=-2)
 
             # Shape [*add_dim, num_actions + 1]

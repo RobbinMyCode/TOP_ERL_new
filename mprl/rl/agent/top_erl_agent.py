@@ -32,6 +32,11 @@ class TopErlAgent(AbstractAgent):
 
         self.evaluation_interval = kwargs.get("evaluation_interval", 1)
 
+        #For reference splitting
+        self.reference_split_args = kwargs.get("reference_split",
+                                               {'split_strategy': 'fixed_max_size', 'split_size': 1e100})
+
+
         # For off-policy learning
         self.replay_buffer = replay_buffer
         self.batch_size = kwargs.get("batch_size")
@@ -300,13 +305,16 @@ class TopErlAgent(AbstractAgent):
 
         # [num_traj, num_segments, num_seg_actions, dim_action] or
         # [num_traj, num_segments, num_smps, num_seg_actions, dim_action]
-        actions = self.policy.sample(require_grad=False,
-                                     params_mean=params_mean_new,
-                                     params_L=params_L_new, times=action_times,
-                                     init_time=init_time,
-                                     init_pos=init_pos, init_vel=init_vel,
-                                     use_mean=False)
 
+
+        actions = self.policy.sample(require_grad=False,
+                                     params_mean=params_mean_new.squeeze(),
+                                     params_L=params_L_new.squeeze(), times=action_times.squeeze(),
+                                     init_time=init_time.squeeze(),
+                                     init_pos=init_pos.squeeze(), init_vel=init_vel.squeeze(),
+                                     use_mean=False,
+                                     split_args=self.reference_split_args)
+        actions = actions.unsqueeze(-3)
         ########################################################################
         ########## Compute Q-func in the future, i.e. Eq(7) second row #########
         ########################################################################
@@ -616,11 +624,19 @@ class TopErlAgent(AbstractAgent):
 
         # Get the trajectory segments
         # [num_trajs, num_segments, num_seg_actions, num_dof]
-        pred_seg_actions = self.policy.sample(
-            require_grad=True, params_mean=pred_mean,
-            params_L=pred_L, times=pred_at_times, init_time=init_time,
-            init_pos=init_pos, init_vel=init_vel, use_mean=False)
+        #actions = self.policy.sample(require_grad=False,
+        #                             params_mean=params_mean_new.squeeze(),
+        #                             params_L=params_L_new.squeeze(), times=action_times.squeeze(),
+        #                             init_time=init_time.squeeze(),
+        #                             init_pos=init_pos.squeeze(), init_vel=init_vel.squeeze(),
+        #                             use_mean=False)
 
+
+        pred_seg_actions = self.policy.sample(
+            require_grad=True, params_mean=pred_mean.squeeze(),
+            params_L=pred_L.squeeze(), times=pred_at_times.squeeze(), init_time=init_time.squeeze(),
+            init_pos=init_pos.squeeze(), init_vel=init_vel.squeeze(), use_mean=False, split_args=self.reference_split_args)
+        pred_seg_actions = pred_seg_actions.unsqueeze(-3)
         # Current state
         # [num_traj, num_segments, dim_state]
         c_state = states[:, seg_start_idx]

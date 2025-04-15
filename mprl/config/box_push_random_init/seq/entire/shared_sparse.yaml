@@ -17,7 +17,7 @@ verbose_level: 2
 wandb:
   project: *exp_name
   group: *sub_exp_name
-  entity: YOUR_USER_NAME
+  entity: uiery
   log_interval: &log_interval 100
   log_model: true
   model_name: model
