@@ -1,6 +1,7 @@
 import torch
 from mprl.util.util_mp import *
 from .black_box_policy import BlackBoxPolicy
+import numpy as np
 
 
 class TopErlPolicy(BlackBoxPolicy):
@@ -76,13 +77,27 @@ class TopErlPolicy(BlackBoxPolicy):
             total_size_covered = 0
             split_size_list = []
             while total_size_covered < times.size(-1):
-                next_split = torch.randint(min_size, max_size)
+                next_split = np.random.randint(min_size, max_size)
                 if total_size_covered + next_split < times.size(-1):
                     split_size_list.append(next_split)
                 else:
                     split_size_list.append(times.size(-1) - total_size_covered)
                     break #doesnt do anything that isnt dont anyway, just for visual representation
                 total_size_covered += next_split
+
+        if splitting["split_strategy"] == "random_gauss":
+            mean, std = splitting["mean_std"]
+            total_size_covered = 0
+            split_size_list = []
+            while total_size_covered < times.size(-1):
+                next_split = max(1, int(np.around(np.random.normal(float(mean), float(std)))))
+                if total_size_covered + next_split < times.size(-1):
+                    split_size_list.append(next_split)
+                else:
+                    split_size_list.append(times.size(-1) - total_size_covered)
+                    break  # doesnt do anything that isnt dont anyway, just for visual representation
+                total_size_covered += next_split
+
         #################
 
         #print("times", times.size(), "init_pos", sample_func_kwargs["init_pos"].size(),
