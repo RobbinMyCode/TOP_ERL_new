@@ -73,7 +73,7 @@ class TopErlPolicy(BlackBoxPolicy):
             if times.size(-1) > n_splits * default_split:
                 split_size_list.append(times.size(-1) - n_splits * default_split)
 
-        if splitting['split_strategy'] == "fixed_max_size":
+        elif splitting['split_strategy'] == "fixed_max_size":
             default_split = int(splitting["split_size"])
             n_splits = times.size(-1) // default_split
 
@@ -83,7 +83,7 @@ class TopErlPolicy(BlackBoxPolicy):
             elif default_split > times.size(-1):
                 split_size_list = [times.size(-1)]
 
-        if splitting["split_strategy"] == "random_size_range":
+        elif splitting["split_strategy"] == "random_size_range":
             min_size, max_size = splitting["size_range"]
             total_size_covered = 0
             split_size_list = []
@@ -96,7 +96,7 @@ class TopErlPolicy(BlackBoxPolicy):
                     break #doesnt do anything that isnt dont anyway, just for visual representation
                 total_size_covered += next_split
 
-        if splitting["split_strategy"] == "random_gauss":
+        elif splitting["split_strategy"] == "random_gauss":
             mean, std = splitting["mean_std"]
             total_size_covered = 0
             split_size_list = []
@@ -109,6 +109,21 @@ class TopErlPolicy(BlackBoxPolicy):
                     break  # doesnt do anything that isnt dont anyway, just for visual representation
                 total_size_covered += next_split
 
+        else:
+            print("Splitting strategy unknown: {}".format(splitting["split_strategy"]) + " possible strategies are "
+'''"fixed_max_size":       split in segments, maximally as big as the arg
+"n_equal_splits":       split into n equal parts (+one for the rest if num_samples is not a multiple)
+"random_size_range":    randomized segment sizes, uniformly distributed from x to y (different values each call)
+"random_gauss":         randomized segment sizes, gaussian distributed around mean with std
+
+-> for every strategy if it does not fully cover the data and the next segment would "overcover" it a smaller segment is added in the end
+args:
+    split_size: int         #required for split strategy "fixed_max_size"
+    n_splits: int           #required for split_strategy "n_equal_splits"
+    size_range: [int,int]   #required for split_strategy "random_size_range"
+    mean_std: [int,int]     #required for split_strategy "random_gauss"
+    ''')
+            raise KeyError
         #############################################################################################
         #############################################################################################
 

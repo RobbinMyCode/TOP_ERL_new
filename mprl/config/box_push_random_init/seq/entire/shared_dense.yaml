@@ -88,9 +88,9 @@ params:
       mp: *mp
 
   reference_split:
-    split_strategy: "size_range"
+    split_strategy: "random_size_range"
     split_size: 13      #required for split strategy "fixed_max_size" (adds an other smaller split at the end if num_times % split_size != 0
-    n_splits: 12       #required for split_strategy "n_equal_splits" (if n equal sized are impossible, adds an other smaller split)
+    n_splits: 12        #required for split_strategy "n_equal_splits" (if n equal sized are impossible, adds an other smaller split)
     size_range: [5,25]  #required for split_strategy "random_size_range"
     mean_std: [10,5]    #required for split_strategy "random_gauss"
 
