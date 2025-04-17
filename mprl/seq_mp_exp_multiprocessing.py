@@ -60,6 +60,8 @@ class MPExperimentMultiProcessing(experiment.AbstractIterativeExperiment):
 
 
         #add split arguments to sampler + critic as they will call the reference point splitting in the policy (which does not need prior information for it)
+        if cfg["reference_split"] == {}:
+            cfg["reference_split"] = {"split_strategy": "n_equal_splits", "n_splits": 1}
         cfg["sampler"]["args"]["reference_split"] = cfg["reference_split"]
         cfg["critic"]["args"]["reference_split"] = cfg["reference_split"]
 

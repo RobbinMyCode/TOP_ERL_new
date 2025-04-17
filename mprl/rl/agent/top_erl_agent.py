@@ -624,19 +624,12 @@ class TopErlAgent(AbstractAgent):
 
         # Get the trajectory segments
         # [num_trajs, num_segments, num_seg_actions, num_dof]
-        #actions = self.policy.sample(require_grad=False,
-        #                             params_mean=params_mean_new.squeeze(),
-        #                             params_L=params_L_new.squeeze(), times=action_times.squeeze(),
-        #                             init_time=init_time.squeeze(),
-        #                             init_pos=init_pos.squeeze(), init_vel=init_vel.squeeze(),
-        #                             use_mean=False)
-
-
         pred_seg_actions = self.policy.sample(
             require_grad=True, params_mean=pred_mean.squeeze(),
             params_L=pred_L.squeeze(), times=pred_at_times.squeeze(), init_time=init_time.squeeze(),
             init_pos=init_pos.squeeze(), init_vel=init_vel.squeeze(), use_mean=False, split_args=self.reference_split_args)
         pred_seg_actions = pred_seg_actions.unsqueeze(-3)
+
         # Current state
         # [num_traj, num_segments, dim_state]
         c_state = states[:, seg_start_idx]

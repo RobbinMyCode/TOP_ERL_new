@@ -34,16 +34,25 @@ class TopErlPolicy(BlackBoxPolicy):
         self.num_dof = self.mp.num_dof
 
 
-    def sample_splitted(self, times, sample_func, splitting=["n_equal_splits",100], **sample_func_kwargs):
+    def sample_splitted(self, times, sample_func, splitting={"split_strategy": "n_equal_splits", "n_splits": 1}, **sample_func_kwargs):
         '''
             called in sample to sample with changing "reference points" (defined in times)
         Args:
             times: timepoints to evaluate pos+vel
             sample_func: function to sample trajectories from
-            splitting: tuple: [type of splitting:str, split options]
-                -> 1) type of splitting = "n_equal_splits"
-                    ==> split_option=int: number of equal split -> splitsize = times // split_option
-                        if times % split_option != 0, n+1 splits will be created, where the last is smaller
+            splitting: dict: [split_strategy:str, split options (different args for different split_stragegies]
+                split_strategy:
+                    "fixed_max_size":       split in segments, maximally as big as the arg
+                    "n_equal_splits":       split into n equal parts (+one for the rest if num_samples is not a multiple)
+                    "random_size_range":    randomized segment sizes, uniformly distributed from x to y (different values each call)
+                    "random_gauss":         randomized segment sizes, gaussian distributed around mean with std
+
+                    -> for every strategy if it does not fully cover the data and the next segment would "overcover" it a smaller segment is added in the end
+                args:
+                    split_size: int         #required for split strategy "fixed_max_size"
+                    n_splits: int           #required for split_strategy "n_equal_splits"
+                    size_range: [int,int]   #required for split_strategy "random_size_range"
+                    mean_std: [int,int]     #required for split_strategy "random_gauss"
             **sample_func_kwargs: all arguments of sample func (except times) [params, params_L, .... ]
 
         Returns:
@@ -53,9 +62,11 @@ class TopErlPolicy(BlackBoxPolicy):
         init_time = sample_func_kwargs["init_time"]
         num_smp = sample_func_kwargs.get("num_smp", 1)
 
-        ### splitting ###
+        #############################################################################################
+        ############################     splitting    ###############################################
+
         if splitting['split_strategy'] == "n_equal_splits":
-            n_splits = splitting["n_splits"]
+            n_splits = int(splitting["n_splits"])
             default_split = times.size(-1) // n_splits
             
             split_size_list = [default_split] * n_splits 
@@ -63,7 +74,7 @@ class TopErlPolicy(BlackBoxPolicy):
                 split_size_list.append(times.size(-1) - n_splits * default_split)
 
         if splitting['split_strategy'] == "fixed_max_size":
-            default_split = splitting["split_size"]
+            default_split = int(splitting["split_size"])
             n_splits = times.size(-1) // default_split
 
             split_size_list = [default_split] * n_splits
@@ -98,10 +109,10 @@ class TopErlPolicy(BlackBoxPolicy):
                     break  # doesnt do anything that isnt dont anyway, just for visual representation
                 total_size_covered += next_split
 
-        #################
+        #############################################################################################
+        #############################################################################################
 
-        #print("times", times.size(), "init_pos", sample_func_kwargs["init_pos"].size(),
-        #      "init_vel", sample_func_kwargs["init_pos"].size(), "splitsizelist", split_size_list)
+
         smp_pos, smp_vel = \
             sample_func(times=times[..., :split_size_list[0]], **sample_func_kwargs)
 
@@ -161,7 +172,7 @@ class TopErlPolicy(BlackBoxPolicy):
 
     def sample(self, require_grad, params_mean, params_L,
                times, init_time, init_pos, init_vel, use_mean=False,
-               num_samples=1, split_args={'split_strategy': 'fixed_max_size', 'split_size': 1e100}):
+               num_samples=1, split_args={"split_strategy": "n_equal_splits", "n_splits": 1}):
         """
         Given a segment-wise state, rsample an action
         Args:
@@ -225,44 +236,6 @@ class TopErlPolicy(BlackBoxPolicy):
                                             init_vel=init_vel,
                                             num_smp=num_samples,
                                             flat_shape=False)
-
-            #if we have multiple stops --> sample sub trajectories from there #TODO pararellize in case
-
-            #initial conditions: time and pos+vel after first n time steps (after first sample_trajectories call)
-            smp_pos_xn = smp_pos
-            smp_vel_xn = smp_vel
-            curr_init_time = init_time
-
-
-            for time_idx, time in enumerate(times[1:]):
-                pos_xn = np.empty_like(smp_pos)[..., :time, :]
-                vel_xn = np.empty_like(smp_vel)[..., :time, :]
-                #start conditions for current loop
-                prev_end_pos = smp_pos_xn
-                prev_end_vel = smp_vel_xn
-                curr_init_time += times[time_idx] #times[time_idx] --> predecessor of "time"
-
-
-                for sample_n in range(num_samples):
-                    smp_pos_xi, smp_vel_xi = \
-                        self.mp.sample_trajectories(times=time, params=params_mean,
-                                                    params_L=params_L,
-                                                    init_time=curr_init_time,
-                                                    init_pos=prev_end_pos[..., -1, :] if num_samples == 1 else prev_end_pos[..., 0, -1, :],
-                                                    init_vel=prev_end_vel[..., -1, :] if num_samples == 1 else prev_end_vel[..., 0, -1, :],
-                                                    num_smp=1,
-                                                    flat_shape=False)
-
-                    #most likely if case not needed as output shape will be [..., 1, num_times, num_dof]
-                    if num_samples == 1:
-                        smp_pos_xn = smp_pos_xi
-                        smp_vel_xn = smp_vel_xi
-                    else:
-                        pos_xn[..., sample_n, :, :] = smp_pos_xi
-                        vel_xn[..., sample_n, :, :] = smp_vel_xi
-
-                smp_pos = np.concatenate([smp_pos, pos_xn], axis=-2)
-                smp_vel = np.concatenate([smp_vel, vel_xn], axis=-2)
 
             # squeeze the dimension of sampling
             '''
