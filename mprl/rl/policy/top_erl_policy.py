@@ -1,5 +1,6 @@
 import torch
 from mprl.util.util_mp import *
+import mprl.util as util
 from .black_box_policy import BlackBoxPolicy
 import numpy as np
 
@@ -62,72 +63,7 @@ class TopErlPolicy(BlackBoxPolicy):
         init_time = sample_func_kwargs["init_time"]
         num_smp = sample_func_kwargs.get("num_smp", 1)
 
-        #############################################################################################
-        ############################     splitting    ###############################################
-
-        if splitting['split_strategy'] == "n_equal_splits":
-            n_splits = int(splitting["n_splits"])
-            default_split = times.size(-1) // n_splits
-            
-            split_size_list = [default_split] * n_splits 
-            if times.size(-1) > n_splits * default_split:
-                split_size_list.append(times.size(-1) - n_splits * default_split)
-
-        elif splitting['split_strategy'] == "fixed_max_size":
-            default_split = int(splitting["split_size"])
-            n_splits = times.size(-1) // default_split
-
-            split_size_list = [default_split] * n_splits
-            if times.size(-1) > n_splits * default_split:
-                split_size_list.append(times.size(-1) - n_splits * default_split)
-            elif default_split > times.size(-1):
-                split_size_list = [times.size(-1)]
-
-        elif splitting["split_strategy"] == "random_size_range":
-            min_size, max_size = splitting["size_range"]
-            total_size_covered = 0
-            split_size_list = []
-            while total_size_covered < times.size(-1):
-                next_split = np.random.randint(min_size, max_size)
-                if total_size_covered + next_split < times.size(-1):
-                    split_size_list.append(next_split)
-                else:
-                    split_size_list.append(times.size(-1) - total_size_covered)
-                    break #doesnt do anything that isnt dont anyway, just for visual representation
-                total_size_covered += next_split
-
-        elif splitting["split_strategy"] == "random_gauss":
-            mean, std = splitting["mean_std"]
-            total_size_covered = 0
-            split_size_list = []
-            while total_size_covered < times.size(-1):
-                next_split = max(1, int(np.around(np.random.normal(float(mean), float(std)))))
-                if total_size_covered + next_split < times.size(-1):
-                    split_size_list.append(next_split)
-                else:
-                    split_size_list.append(times.size(-1) - total_size_covered)
-                    break  # doesnt do anything that isnt dont anyway, just for visual representation
-                total_size_covered += next_split
-
-        else:
-            print("Splitting strategy unknown: {}".format(splitting["split_strategy"]) + " possible strategies are "
-'''"fixed_max_size":       split in segments, maximally as big as the arg
-"n_equal_splits":       split into n equal parts (+one for the rest if num_samples is not a multiple)
-"random_size_range":    randomized segment sizes, uniformly distributed from x to y (different values each call)
-"random_gauss":         randomized segment sizes, gaussian distributed around mean with std
-
--> for every strategy if it does not fully cover the data and the next segment would "overcover" it a smaller segment is added in the end
-args:
-    split_size: int         #required for split strategy "fixed_max_size"
-    n_splits: int           #required for split_strategy "n_equal_splits"
-    size_range: [int,int]   #required for split_strategy "random_size_range"
-    mean_std: [int,int]     #required for split_strategy "random_gauss"
-    ''')
-            raise KeyError
-        #############################################################################################
-        #############################################################################################
-
-
+        split_size_list = util.get_splits(times, splitting)
         smp_pos, smp_vel = \
             sample_func(times=times[..., :split_size_list[0]], **sample_func_kwargs)
 
@@ -146,7 +82,6 @@ args:
 
         #curr_init_time = init_time
         curr_time_idx = 0 #will be increased in loop before usage
-
         for time_split_idx in range(1, len(split_size_list)):
             #give just large enough tensors for pos and vel (no additional empty entries)
             curr_split_size = split_size_list[time_split_idx]
@@ -160,12 +95,12 @@ args:
 
             for sample_n in range(num_smp):
                 smp_pos_xi, smp_vel_xi = \
-                    sample_func(times=times[..., curr_time_idx : curr_time_idx + curr_split_size ],
+                    sample_func(times=times[..., curr_time_idx : curr_time_idx + curr_split_size ] if splitting["correction_completion"]== "current_idx" else times[..., 0 : 0 + curr_split_size ],
                                 init_pos=prev_pos_tensor[..., -1, :].squeeze(-2) if num_smp == 1 \
                                     else prev_pos_tensor[..., sample_n, -1, :].squeeze(-2),
                                 init_vel=prev_vel_tensor[..., -1, :].squeeze(-2) if num_smp == 1 \
                                     else prev_vel_tensor[..., sample_n, -1, :].squeeze(-2),
-                                init_time=times[..., curr_time_idx - 1].squeeze(-1),
+                                init_time=times[..., curr_time_idx - 1].squeeze(-1) if splitting["correction_completion"]== "current_idx" else init_time,
                                 **iteration_sample_func_kwargs)
 
                 # most likely if case not needed as output shape will be [..., 1, num_times, num_dof]
@@ -173,10 +108,10 @@ args:
                     smp_pos_xn = smp_pos_xi
                     smp_vel_xn = smp_vel_xi
                 else:
-                    #adapt the positions to not add exra steps that are not used
-                    if curr_split_size < smp_pos_xn.size(-2):
-                        smp_pos_xn = smp_pos_xn[..., :curr_split_size, :]
-                        smp_vel_xn = smp_vel_xn[..., :curr_split_size, :]
+                    #adapt the positions to not add exra steps that are not used // keep all states if previous was smaller
+                    if curr_split_size != smp_pos_xn.size(-2) and sample_n == 0:
+                        smp_pos_xn = torch.zeros(*smp_pos_xn.size()[:-2], curr_split_size, smp_pos_xn.size(-1))
+                        smp_vel_xn = torch.zeros(*smp_vel_xn.size()[:-2], curr_split_size, smp_vel_xn.size(-1)) #smp_vel_xn[..., :curr_split_size, :]
                     smp_pos_xn[..., sample_n, :, :] = smp_pos_xi
                     smp_vel_xn[..., sample_n, :, :] = smp_vel_xi
 
@@ -230,6 +165,7 @@ args:
             [*add_dim, num_samples, num_times, num_dof * 2]
 
         """
+        #TODO: doesnt use environemt action like box position -> needs to be adapted in sampler + critic
         if not use_mean:
             smp_pos, smp_vel = self.sample_splitted(times=times, 
                                                     sample_func=self.mp.sample_trajectories,

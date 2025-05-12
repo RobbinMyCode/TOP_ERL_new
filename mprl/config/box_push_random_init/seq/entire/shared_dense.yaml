@@ -44,8 +44,8 @@ params:
       use_old_policy: true  # use a target policy as the old policy for the trust region projection
       old_policy_update_rate: 0.005  # update rate for the old policy from the current policy
       batch_size: 512
-      critic_update_from: 300
-      policy_update_from: 2000
+      critic_update_from: 1 #300
+      policy_update_from: 2 #2000
       dtype: *dtype
       device: *device
 
@@ -88,9 +88,16 @@ params:
       mp: *mp
 
   reference_split:
-    split_strategy: "random_size_range"
+    correction_completion: "current_idx"
+      #options: current_idx and "as_zero"
+        #curr idx: every split gets time indexes fitting to the corresponding part of the trajectory
+          #-> all individual basically start at end at the same spots, but vary in form [and previous steps all get cut out]--> parameters mean the same for all
+        #as_zero: every split will start at time index 0 --> each split starts at the current starting position [all steps after total step size get cut out]
+          #-> goal parameter loses direct meaning as goal is not reachable in the used step size but would need last interval start+total_steps
+
+    split_strategy: "n_equal_splits"
     split_size: 13      #required for split strategy "fixed_max_size" (adds an other smaller split at the end if num_times % split_size != 0
-    n_splits: 12        #required for split_strategy "n_equal_splits" (if n equal sized are impossible, adds an other smaller split)
+    n_splits: 4        #required for split_strategy "n_equal_splits" (if n equal sized are impossible, adds an other smaller split)
     size_range: [5,25]  #required for split_strategy "random_size_range"
     mean_std: [10,5]    #required for split_strategy "random_gauss"
 

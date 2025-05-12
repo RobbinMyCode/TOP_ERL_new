@@ -141,8 +141,8 @@ class MPExperimentMultiProcessing(experiment.AbstractIterativeExperiment):
             "episode_init_time": (),
             "episode_init_pos": (self.policy.num_dof,),
             "episode_init_vel": (self.policy.num_dof,),
-            "episode_params_mean": (policy_out_dim,),
-            "episode_params_L": (policy_out_dim, policy_out_dim),
+            "episode_params_mean": (4, policy_out_dim,),
+            "episode_params_L": (4, policy_out_dim, policy_out_dim),
         }
 
         self.replay_buffer = replay_buffer_factory(
