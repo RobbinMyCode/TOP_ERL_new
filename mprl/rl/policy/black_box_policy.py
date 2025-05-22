@@ -50,8 +50,9 @@ class BlackBoxPolicy(AbstractGaussianPolicy):
         if self.contextual_cov:
             params_L = self._vector_to_cholesky(self.variance_net(obs))
         else:
-            L_vector = util.add_expand_dim(self.variance_net.variable, [0],
-                                           [obs.shape[0]])
+            L_vector = util.add_expand_dim(self.variance_net.variable, [i for i in range(len(params_mean.size()) - 1)],
+                                           [obs.shape[i] for i in range(len(params_mean.size()) - 1)])
+
             params_L = self._vector_to_cholesky(L_vector)
         return params_mean, params_L
 

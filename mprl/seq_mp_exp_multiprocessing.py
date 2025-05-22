@@ -139,10 +139,11 @@ class MPExperimentMultiProcessing(experiment.AbstractIterativeExperiment):
             "step_dones": (traj_length,),
             "episode_init_idx": (),
             "episode_init_time": (),
+            "split_start_indexes": (cfg["reference_split"]["n_splits"], ),
             "episode_init_pos": (self.policy.num_dof,),
             "episode_init_vel": (self.policy.num_dof,),
-            "episode_params_mean": (4, policy_out_dim,),
-            "episode_params_L": (4, policy_out_dim, policy_out_dim),
+            "episode_params_mean": (cfg["reference_split"]["n_splits"], policy_out_dim,),
+            "episode_params_L": (cfg["reference_split"]["n_splits"], policy_out_dim, policy_out_dim),
         }
 
         self.replay_buffer = replay_buffer_factory(

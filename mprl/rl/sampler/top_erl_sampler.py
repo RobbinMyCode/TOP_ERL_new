@@ -6,7 +6,7 @@ from mprl.util import assert_shape
 from mprl.util import to_np
 from mprl.util import to_ts
 from mprl.rl.sampler import BlackBoxSampler
-
+import copy
 
 class TopErlSampler(BlackBoxSampler):
     def __init__(self,
@@ -186,8 +186,12 @@ class TopErlSampler(BlackBoxSampler):
                 torch.zeros(num_env, dtype=torch.long, device=self.device)
             )
 
-            list_split_indexes = split_list
-            
+            list_split_indexes = copy.deepcopy(split_list)
+            list_split_indexes[0] = 0
+            for i in range(1, len(split_list)):
+                list_split_indexes[i] = split_list[i-1] + list_split_indexes[i-1] #steps from previous steps + sum of steps before
+            assert list_split_indexes[-1] == num_times - split_list[-1]
+
             for split_iteration, split in enumerate(split_list):
                 #repetition of episode_inits from new assessment further down
                 #and torchify it for use
@@ -226,6 +230,7 @@ class TopErlSampler(BlackBoxSampler):
                                              init_pos=episode_init_pos,
                                              init_vel=episode_init_vel,
                                              use_mean=deterministic,
+                                             ref_time = step_times[0],
                                              split_args={"split_strategy": "n_equal_splits", "n_splits": 1})
 
 
@@ -391,7 +396,7 @@ class TopErlSampler(BlackBoxSampler):
         results["step_dones"] = step_dones
         results["step_time_limit_dones"] = step_time_limit_dones
 
-        results["split_index"] = list_split_indexes
+        results["split_start_indexes"] = torch.tensor(list_split_indexes)  ### these are start-indexes of the specific split (e.g. [0, 25, 50, 75]) for a splitsize of 25
         results["total_time_list"] = step_times.to("cpu").numpy()
 
         results["episode_reward"] = torch.cat(list_episode_reward, dim=0)

@@ -197,8 +197,8 @@ class TopErlAgent(AbstractAgent):
 
         # Decision state
         # [num_traj, dim_state]
-        d_state = states[
-            torch.arange(num_traj, device=self.device), episode_init_idx]
+        #TODO: dataset["split_start_indexes"][0] is fine for same split sizes, but with varying/random it doesnt catch the full info
+        d_state = states[torch.arange(num_traj, device=self.device)][:, torch.tensor(dataset["split_start_indexes"][0])]
         if self.use_old_policy:
             with torch.no_grad():
                 params_mean_old, params_L_old = self.policy_old.policy(d_state)
@@ -279,6 +279,8 @@ class TopErlAgent(AbstractAgent):
         times = self.sampler.get_times(dataset["episode_init_time"],
                                        self.sampler.num_times,
                                        self.traj_has_downsample)
+
+        ref_time = times[0]
         # [num_traj, traj_length] -> [num_traj, num_segments]
         times = times[:, seg_start_idx]
 
@@ -306,15 +308,20 @@ class TopErlAgent(AbstractAgent):
         # [num_traj, num_segments, num_seg_actions, dim_action] or
         # [num_traj, num_segments, num_smps, num_seg_actions, dim_action]
 
+        #n params_mean and params_L -> put each in individually
 
         actions = self.policy.sample(require_grad=False,
-                                     params_mean=params_mean_new.squeeze(),
-                                     params_L=params_L_new.squeeze(), times=action_times.squeeze(),
-                                     init_time=init_time.squeeze(),
-                                     init_pos=init_pos.squeeze(), init_vel=init_vel.squeeze(),
+                                     params_mean=params_mean_new,
+                                     params_L=params_L_new, times=action_times,
+                                     init_time=init_time,
+                                     init_pos=init_pos, init_vel=init_vel,
                                      use_mean=False,
-                                     split_args=self.reference_split_args)
-        actions = actions.unsqueeze(-3)
+                                     split_args=self.reference_split_args,
+                                     use_case = "agent",
+                                     ref_time_list = self.sampler.get_times(dataset["episode_init_time"],
+                                       self.sampler.num_times,
+                                       self.traj_has_downsample)[0])
+        #actions = actions.unsqueeze(-3)
         ########################################################################
         ########## Compute Q-func in the future, i.e. Eq(7) second row #########
         ########################################################################

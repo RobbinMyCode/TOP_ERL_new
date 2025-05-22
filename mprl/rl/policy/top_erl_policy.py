@@ -3,7 +3,7 @@ from mprl.util.util_mp import *
 import mprl.util as util
 from .black_box_policy import BlackBoxPolicy
 import numpy as np
-
+import copy
 
 class TopErlPolicy(BlackBoxPolicy):
     def __init__(self,
@@ -33,6 +33,96 @@ class TopErlPolicy(BlackBoxPolicy):
         self.mp: ProDMP = get_mp(**kwargs["mp"])
         # self.mp.show_scaled_basis(True)
         self.num_dof = self.mp.num_dof
+
+    def get_param_indexes(self, times, split_list, ref_time_list):
+        split_starts = [0]*len(split_list)
+        for i in range(1, len(split_list)):
+            split_starts[i] = split_starts[i-1] + split_list[i]
+
+        split_start_time_steps = ref_time_list[split_starts].to(self.device)
+
+        condition_reached =  times[..., None] >= split_start_time_steps
+        policy_indexes = torch.sum(condition_reached, axis=-1) - 1
+        return policy_indexes
+
+    def sample_splitted_partial_times(self, times,
+                                      sample_func,
+                                      splitting={"split_strategy": "n_equal_splits", "n_splits": 1},
+                                      ref_time_list=torch.tensor(np.linspace(0,2,101)),
+                                      **sample_func_kwargs):
+
+        if "ref_time_list" in sample_func_kwargs:
+            ref_time_list = sample_func_kwargs["ref_time_list"].to(self.device)
+        times = times.to(self.device)
+
+        split_size_list = util.get_splits(times, splitting)
+        policy_indexes = self.get_param_indexes(times, split_size_list, ref_time_list)
+        policy_start_indexes = self.get_param_indexes(sample_func_kwargs["init_time"], split_size_list, ref_time_list)
+
+        params = sample_func_kwargs.get("params")
+        #
+
+        #param_at_start = sample_func_kwargs.get("params")[..., policy_start_indexes, :]
+        i = np.arange(params.size()[0])[:, None]
+        j = np.arange(params.size()[1])[None, :]
+        param_at_start = params[i,j, policy_start_indexes, :]
+
+
+
+        #get indexes->timesteps at which the policy changes --> cut off point
+        mask = policy_start_indexes.unsqueeze(-1) < policy_indexes
+        first_diff = torch.argmax(mask.int(), dim=-1) #argmax returns first largest entry (either 0=False or 1=True) --> first match
+        first_diff[~mask.any(dim=-1)] = policy_indexes.size(-1)
+
+
+        iteration_sample_func_kwargs = copy.deepcopy(sample_func_kwargs)
+        iteration_sample_func_kwargs["params"] = param_at_start
+
+
+        if "params_L" in sample_func_kwargs:
+            params_L = sample_func_kwargs.get("params_L")
+            param_L_at_start = params_L[i, j, policy_start_indexes, :, :]
+            iteration_sample_func_kwargs["params_L"] = param_L_at_start
+
+        smp_pos, smp_vel = \
+            sample_func(times=times, **iteration_sample_func_kwargs)
+
+        #zero out timesteps that should not have been used
+        smp_pos = smp_pos.squeeze(2) * ~mask.unsqueeze(-1)
+        smp_vel= smp_vel.squeeze(2) * ~mask.unsqueeze(-1)
+
+
+        for time_split in split_size_list:
+            #SOLUTION OF DGL SHOULD BE INDEPENDEND ON WHIH START CONDITION ONE USES, SO WE CAN JUST REUSE THE PREVIOUS ONES
+            #new breaking point 1 index higher, else the same
+            policy_start_indexes += 1
+            mask = policy_start_indexes.unsqueeze(-1) < policy_indexes
+
+            param_update = params[i, j, policy_start_indexes, :]
+            iteration_sample_func_kwargs["params"] = param_update
+            if "params_L" in sample_func_kwargs:
+                param_L_update = params_L[i, j, policy_start_indexes, :, :] #i,j dummy vars only ensure correct indexing
+                iteration_sample_func_kwargs["params_L"] = param_L_update
+
+            times_masked = torch.where(mask, times, times.size(-1))
+            first_valid_times, _ = times_masked.min(dim=2)
+
+            #inital conditions stay the same, only mean and var (param, param_L)
+            #basically overkill in calculation, everytime whole sequence
+            smp_pos_add, smp_vel_add = \
+                sample_func(times=times, **iteration_sample_func_kwargs)
+
+            #mask off all entries, where a different params/params_L should have been used as 0 -> can be added on top
+            non_zero_mask_results = policy_start_indexes.unsqueeze(-1) == policy_indexes
+            smp_pos_add = smp_pos_add.squeeze(2) * non_zero_mask_results.unsqueeze(-1)
+            smp_vel_add = smp_vel_add.squeeze(2) * non_zero_mask_results.unsqueeze(-1)
+
+
+            smp_pos += smp_pos_add
+            smp_vel += smp_vel_add
+
+
+        return smp_pos, smp_vel
 
 
     def sample_splitted(self, times, sample_func, splitting={"split_strategy": "n_equal_splits", "n_splits": 1}, **sample_func_kwargs):
@@ -122,7 +212,7 @@ class TopErlPolicy(BlackBoxPolicy):
 
     def sample(self, require_grad, params_mean, params_L,
                times, init_time, init_pos, init_vel, use_mean=False,
-               num_samples=1, split_args={"split_strategy": "n_equal_splits", "n_splits": 1}):
+               num_samples=1, split_args={"split_strategy": "n_equal_splits", "n_splits": 1}, **kwargs):
         """
         Given a segment-wise state, rsample an action
         Args:
@@ -165,9 +255,17 @@ class TopErlPolicy(BlackBoxPolicy):
             [*add_dim, num_samples, num_times, num_dof * 2]
 
         """
-        #TODO: doesnt use environemt action like box position -> needs to be adapted in sampler + critic
+        for key in kwargs:
+            split_args[key] = kwargs[key]
+        use_case = split_args.get("use_case", "sampler")
+        if use_case == "agent":
+            split_sample_func = self.sample_splitted_partial_times
+        else:
+            split_sample_func = self.sample_splitted
+
+
         if not use_mean:
-            smp_pos, smp_vel = self.sample_splitted(times=times, 
+            smp_pos, smp_vel = split_sample_func(times=times,
                                                     sample_func=self.mp.sample_trajectories,
                                                     params=params_mean,
                                                     params_L=params_L,
@@ -190,7 +288,7 @@ class TopErlPolicy(BlackBoxPolicy):
 
             # squeeze the dimension of sampling
             '''
-            if num_samples == 1:
+            if num_samples == 1 and use_case != "agent":
                 smp_pos, smp_vel = smp_pos.squeeze(-3), smp_vel.squeeze(-3)
             else:
                 pass
@@ -206,7 +304,7 @@ class TopErlPolicy(BlackBoxPolicy):
                     self.mp.get_traj_pos(times, params, init_time, init_pos, init_vel, flat_shape), 
                     self.mp.get_traj_vel(times, params, init_time, init_pos, init_vel, flat_shape)
                 ]
-            smp_pos, smp_vel = self.sample_splitted(times=times, 
+            smp_pos, smp_vel = split_sample_func(times=times,
                                                     sample_func=pos_vel_func,
                                                     params=params_mean,
                                                     init_time=init_time,
