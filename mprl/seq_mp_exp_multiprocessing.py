@@ -63,6 +63,7 @@ class MPExperimentMultiProcessing(experiment.AbstractIterativeExperiment):
         if cfg["reference_split"] == {}:
             cfg["reference_split"] = {"split_strategy": "n_equal_splits", "n_splits": 1}
         cfg["sampler"]["args"]["reference_split"] = cfg["reference_split"]
+        cfg["agent"]["args"]["reference_split"] = cfg["reference_split"]
         cfg["critic"]["args"]["reference_split"] = cfg["reference_split"]
 
         cpu_cores = cw_config.get("cpu_cores", None)
@@ -139,9 +140,11 @@ class MPExperimentMultiProcessing(experiment.AbstractIterativeExperiment):
             "step_dones": (traj_length,),
             "episode_init_idx": (),
             "episode_init_time": (),
-            "split_start_indexes": (cfg["reference_split"]["n_splits"], ),
+            "split_start_indexes": (cfg["reference_split"]["n_splits"],),
             "episode_init_pos": (self.policy.num_dof,),
             "episode_init_vel": (self.policy.num_dof,),
+            "segment_wise_init_pos": (cfg["reference_split"]["n_splits"], self.policy.num_dof,),
+            "segment_wise_init_vel": (cfg["reference_split"]["n_splits"], self.policy.num_dof,),
             "episode_params_mean": (cfg["reference_split"]["n_splits"], policy_out_dim,),
             "episode_params_L": (cfg["reference_split"]["n_splits"], policy_out_dim, policy_out_dim),
         }

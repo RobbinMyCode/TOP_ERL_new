@@ -9,7 +9,7 @@ from mprl.rl.sampler import TopErlSampler
 from mprl.util import autocast_if
 
 from torch.cuda.amp import GradScaler
-
+import numpy as np
 
 class TopErlAgent(AbstractAgent):
     def __init__(self,
@@ -215,10 +215,20 @@ class TopErlAgent(AbstractAgent):
         params_mean_new, params_L_new = self.policy.policy(d_state)
 
         # Projection
+        flatter_mean_new = torch.reshape(params_mean_new, (np.prod(params_mean_new.size()[:-1]), params_mean_new.size()[-1]))
+        flatter_mean_old = torch.reshape(params_mean_old,
+                                         (np.prod(params_mean_old.size()[:-1]), params_mean_old.size()[-1]))
+        flatter_L_new = torch.reshape(params_L_new,
+                                         (np.prod(params_L_new.size()[:-2]), *params_L_new.size()[-2:]))
+        flatter_L_old = torch.reshape(params_L_old,
+                                      (np.prod(params_L_old.size()[:-2]), *params_L_old.size()[-2:]))
         proj_mean, proj_L = self.projection(self.policy,
-                                            (params_mean_new, params_L_new),
-                                            (params_mean_old, params_L_old),
+                                            (flatter_mean_new, flatter_L_new),
+                                            (flatter_mean_old, flatter_L_old),
                                             self.num_iterations)
+
+        proj_mean = torch.reshape(proj_mean, params_mean_new.size())
+        proj_L = torch.reshape(proj_L, params_L_new.size())
 
         # Trust Region loss
         if compute_trust_region_loss:
@@ -229,6 +239,7 @@ class TopErlAgent(AbstractAgent):
                                                       (proj_mean, proj_L))
         else:
             trust_region_loss = None
+
 
         info = {"trust_region_loss": trust_region_loss}
 
@@ -255,8 +266,13 @@ class TopErlAgent(AbstractAgent):
         rewards = dataset["step_rewards"]
 
         # [num_traj, traj_length, dim_action]
-        traj_init_pos = dataset["step_desired_pos"]
+        traj_init_pos = dataset["step_desired_pos"] #desired_pos = end_pos of old trajectory at index
         traj_init_vel = dataset["step_desired_vel"]
+
+        #TODO: truncation not optimal, but cant just select incorrect start point for param 2
+        #TODO 0) check truncation in V is the problem (check everything else)
+        #TODO: 1) i) get parameters of policy 2 given the correct initial conditions from traj_init at its corr timestep    ii) use those params to continue from the last pos
+        #TODO: [[ 2) use policy outside its range of knowledge ]] (perhaps)
 
         num_segments = idx_in_segments.shape[0]
         num_seg_actions = idx_in_segments.shape[-1] - 1
@@ -308,20 +324,20 @@ class TopErlAgent(AbstractAgent):
         # [num_traj, num_segments, num_seg_actions, dim_action] or
         # [num_traj, num_segments, num_smps, num_seg_actions, dim_action]
 
-        #n params_mean and params_L -> put each in individually
-
+        sampling_args_value_func = self.reference_split_args.copy()
+        sampling_args_value_func["q_loss_strategy"] = sampling_args_value_func["v_func_estimation"]
         actions = self.policy.sample(require_grad=False,
                                      params_mean=params_mean_new,
                                      params_L=params_L_new, times=action_times,
                                      init_time=init_time,
                                      init_pos=init_pos, init_vel=init_vel,
                                      use_mean=False,
-                                     split_args=self.reference_split_args,
+                                     split_args=sampling_args_value_func,
                                      use_case = "agent",
                                      ref_time_list = self.sampler.get_times(dataset["episode_init_time"],
                                        self.sampler.num_times,
                                        self.traj_has_downsample)[0])
-        #actions = actions.unsqueeze(-3)
+
         ########################################################################
         ########## Compute Q-func in the future, i.e. Eq(7) second row #########
         ########################################################################
@@ -576,7 +592,8 @@ class TopErlAgent(AbstractAgent):
 
             # Update policy net parameters
             self.policy_optimizer.zero_grad(set_to_none=True)
-            policy_loss.backward()
+            with torch.autograd.set_detect_anomaly(True):
+                policy_loss.backward()
             self.policy_optimizer.step()
 
             # Logging
@@ -619,8 +636,8 @@ class TopErlAgent(AbstractAgent):
         seg_actions_idx = idx_in_segments[..., :-1]
 
         # Broadcasting data to the correct shape
-        pred_mean = util.add_expand_dim(pred_mean, [-2], [num_segments])
-        pred_L = util.add_expand_dim(pred_L, [-3], [num_segments])
+        pred_mean = util.add_expand_dim(pred_mean, [-3], [num_segments])
+        pred_L = util.add_expand_dim(pred_L, [-4], [num_segments])
         pred_at_times = times[:, idx_in_segments[..., :-1]]
 
         # Note, here the init condition of the traj is used by all segments
@@ -632,10 +649,18 @@ class TopErlAgent(AbstractAgent):
         # Get the trajectory segments
         # [num_trajs, num_segments, num_seg_actions, num_dof]
         pred_seg_actions = self.policy.sample(
-            require_grad=True, params_mean=pred_mean.squeeze(),
-            params_L=pred_L.squeeze(), times=pred_at_times.squeeze(), init_time=init_time.squeeze(),
-            init_pos=init_pos.squeeze(), init_vel=init_vel.squeeze(), use_mean=False, split_args=self.reference_split_args)
-        pred_seg_actions = pred_seg_actions.unsqueeze(-3)
+            require_grad=True, params_mean=pred_mean,
+            params_L=pred_L, times=pred_at_times, init_time=init_time,
+            init_pos=init_pos, init_vel=init_vel, use_mean=False, split_args=self.reference_split_args,
+            use_case="agent",
+            segment_wise_init_pos= dataset["segment_wise_init_pos"],
+            segment_wise_init_vel= dataset["segment_wise_init_vel"],
+            ref_time_list=self.sampler.get_times(dataset["episode_init_time"],
+                                                 self.sampler.num_times,
+                                                 self.traj_has_downsample)[0]
+
+        )
+        #pred_seg_actions = pred_seg_actions.unsqueeze(-3)
 
         # Current state
         # [num_traj, num_segments, dim_state]

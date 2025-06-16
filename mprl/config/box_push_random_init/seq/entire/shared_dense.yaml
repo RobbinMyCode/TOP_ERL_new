@@ -103,6 +103,11 @@ params:
     size_range: [5,25]  #required for split_strategy "random_size_range"
     mean_std: [10,5]    #required for split_strategy "random_gauss"
 
+    q_loss_strategy: "start_unchanged" #"truncated" #q-loss is updated via time-slices --> this determines how the time-sliced get cut for the update
+                                 #"truncated" --> one slice only for one parameter segment -> cut off parts that are not created with the same policy parameters
+                                 #"start_unchanged" --> each slice has a startpoint from sampling saved in the replay buffer, with this sampling method
+                                                      # bigger gaps between two consecutive segments which use different parameters may occur, but the policies start with "known startpoints"
+    v_func_estimation: "truncated"
   critic:
     type: TopErlCritic
     args:

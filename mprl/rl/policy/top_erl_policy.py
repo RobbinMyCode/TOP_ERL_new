@@ -43,6 +43,7 @@ class TopErlPolicy(BlackBoxPolicy):
 
         condition_reached =  times[..., None] >= split_start_time_steps
         policy_indexes = torch.sum(condition_reached, axis=-1) - 1
+        policy_indexes[policy_indexes < 0] = 0
         return policy_indexes
 
     def sample_splitted_partial_times(self, times,
@@ -51,11 +52,16 @@ class TopErlPolicy(BlackBoxPolicy):
                                       ref_time_list=torch.tensor(np.linspace(0,2,101)),
                                       **sample_func_kwargs):
 
-        if "ref_time_list" in sample_func_kwargs:
-            ref_time_list = sample_func_kwargs["ref_time_list"].to(self.device)
+        if "ref_time_list" in splitting:
+            ref_time_list = splitting["ref_time_list"].to(self.device)
         times = times.to(self.device)
 
-        split_size_list = util.get_splits(times, splitting)
+        split_size_list = util.get_splits(ref_time_list, splitting)
+        split_start_indexes = [0] * len(split_size_list)
+        for i in range(1, len(split_start_indexes)):
+            split_start_indexes[i] = split_start_indexes[i-1] + split_size_list[i]
+
+
         policy_indexes = self.get_param_indexes(times, split_size_list, ref_time_list)
         policy_start_indexes = self.get_param_indexes(sample_func_kwargs["init_time"], split_size_list, ref_time_list)
 
@@ -70,12 +76,14 @@ class TopErlPolicy(BlackBoxPolicy):
 
 
         #get indexes->timesteps at which the policy changes --> cut off point
-        mask = policy_start_indexes.unsqueeze(-1) < policy_indexes
-        first_diff = torch.argmax(mask.int(), dim=-1) #argmax returns first largest entry (either 0=False or 1=True) --> first match
-        first_diff[~mask.any(dim=-1)] = policy_indexes.size(-1)
+        mask = policy_start_indexes.unsqueeze(-1) == policy_indexes
+        #first_diff = torch.argmax(mask.int(), dim=-1) #argmax returns first largest entry (either 0=False or 1=True) --> first match
+        #first_diff[~mask.any(dim=-1)] = policy_indexes.size(-1)
 
 
-        iteration_sample_func_kwargs = copy.deepcopy(sample_func_kwargs)
+        iteration_sample_func_kwargs = dict()
+        for key in sample_func_kwargs:
+            iteration_sample_func_kwargs[key] = sample_func_kwargs[key]
         iteration_sample_func_kwargs["params"] = param_at_start
 
 
@@ -84,42 +92,81 @@ class TopErlPolicy(BlackBoxPolicy):
             param_L_at_start = params_L[i, j, policy_start_indexes, :, :]
             iteration_sample_func_kwargs["params_L"] = param_L_at_start
 
-        smp_pos, smp_vel = \
+        smp_pos_1, smp_vel_1 = \
             sample_func(times=times, **iteration_sample_func_kwargs)
 
         #zero out timesteps that should not have been used
-        smp_pos = smp_pos.squeeze(2) * ~mask.unsqueeze(-1)
-        smp_vel= smp_vel.squeeze(2) * ~mask.unsqueeze(-1)
+        smp_pos = smp_pos_1.squeeze(2) * mask.unsqueeze(-1)
+        smp_vel= smp_vel_1.squeeze(2) * mask.unsqueeze(-1)
 
+        if splitting.get("q_loss_strategy", "truncated") == "truncated":
+            #repeat the last valid entry for the rest of the tensor in the respective axis
+            #--> pos(time)=total angular position of robot(time) --> same = no change
+            counted_mask = torch.arange(smp_pos.size(-2), device=self.device)[None, None, :] * mask
+            maxed_mask = torch.where(counted_mask == torch.argmax(counted_mask, dim=-1).unsqueeze(-1), 1.0, 0.0)
 
-        for time_split in split_size_list:
+            #residual to add = last valid entry of respective quantity
+            last_entry_pos = smp_pos * maxed_mask.unsqueeze(-1)
+            addition_pos = torch.sum(last_entry_pos, dim=-2)[..., None, :]
+
+            #analogous for velocity
+            last_entry_vel = smp_vel * maxed_mask.unsqueeze(-1)
+            addition_vel = torch.sum(last_entry_vel, dim=-2)[..., None, :]
+
+            #add residual to all entries that are not filled in already
+            smp_pos = smp_pos + addition_pos * ~mask.unsqueeze(-1)
+            smp_vel = smp_vel + addition_vel * ~mask.unsqueeze(-1)
+            return smp_pos, smp_vel
+
+        #example: splits [25,25,25,25] -> need 26 steps to be able to have 2 changes of reference policy parameters (just to save time with leaving out unnecessary iterations)
+        max_remaining_iterations = max(times.size(-1) // np.min(split_size_list) + 1, len(split_size_list)-1)
+
+        for iteration in range(max_remaining_iterations): #maximum possible loop of different used policy parameters
             #SOLUTION OF DGL SHOULD BE INDEPENDEND ON WHIH START CONDITION ONE USES, SO WE CAN JUST REUSE THE PREVIOUS ONES
             #new breaking point 1 index higher, else the same
-            policy_start_indexes += 1
-            mask = policy_start_indexes.unsqueeze(-1) < policy_indexes
+            #TODO: Option 1) get additional init pos from different parts from replay buffer -> use as init condition'
+            #DONE Option 2) truncate at the end of one policy param pair (no further steps or equivalently repeat last valid step)
+            #TODO Option 3) initial condition = last step of previous segment (not from replay buffer)
 
-            param_update = params[i, j, policy_start_indexes, :]
+            # new index = +=1 or max index in that axis if index+1 > max valid index
+            policy_start_indexes = torch.minimum(policy_start_indexes + 1,
+                                                 (splitting["segment_wise_init_pos"].size(-2) -1) * torch.ones(policy_start_indexes.size(), device=self.device)).to(torch.int32)
+
+
+            if splitting.get("q_loss_strategy", "truncated") == "start_unchanged":
+                segment_init_indexes = policy_start_indexes.unsqueeze(-1).expand(-1, -1, splitting["segment_wise_init_pos"].size(-1))
+                iteration_sample_func_kwargs["init_pos"] = torch.gather(splitting["segment_wise_init_pos"], index=segment_init_indexes.to(torch.int64), dim=-2)
+                iteration_sample_func_kwargs["init_vel"] = torch.gather(splitting["segment_wise_init_vel"], index=segment_init_indexes.to(torch.int64), dim=-2)
+
+                #next init time reference is always one step prior start of next split
+                init_idx = torch.tensor(split_start_indexes, device=self.device)[policy_start_indexes] - 1
+                iteration_sample_func_kwargs["init_time"] = ref_time_list[init_idx]
+
+
+            param_idx = policy_start_indexes.unsqueeze(-1).unsqueeze(-1).to(torch.int64).expand(-1, -1, 1, params.size(-1))
+            param_update = torch.gather(params, dim=-2, index=param_idx).squeeze(-2)
             iteration_sample_func_kwargs["params"] = param_update
+
             if "params_L" in sample_func_kwargs:
-                param_L_update = params_L[i, j, policy_start_indexes, :, :] #i,j dummy vars only ensure correct indexing
+                param_idx = policy_start_indexes.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1).to(torch.int64).expand(-1, -1, 1,
+                                                                                                    params.size(-1), params.size(-1))
+                param_L_update = torch.gather(params_L, dim=-3, index=param_idx).squeeze(-3)
                 iteration_sample_func_kwargs["params_L"] = param_L_update
 
-            times_masked = torch.where(mask, times, times.size(-1))
-            first_valid_times, _ = times_masked.min(dim=2)
-
-            #inital conditions stay the same, only mean and var (param, param_L)
             #basically overkill in calculation, everytime whole sequence
-            smp_pos_add, smp_vel_add = \
+            smp_pos_add_i, smp_vel_add_i = \
                 sample_func(times=times, **iteration_sample_func_kwargs)
 
             #mask off all entries, where a different params/params_L should have been used as 0 -> can be added on top
             non_zero_mask_results = policy_start_indexes.unsqueeze(-1) == policy_indexes
-            smp_pos_add = smp_pos_add.squeeze(2) * non_zero_mask_results.unsqueeze(-1)
-            smp_vel_add = smp_vel_add.squeeze(2) * non_zero_mask_results.unsqueeze(-1)
 
 
-            smp_pos += smp_pos_add
-            smp_vel += smp_vel_add
+            smp_pos_add = smp_pos_add_i.squeeze(2) * non_zero_mask_results.unsqueeze(-1)
+            smp_vel_add = smp_vel_add_i.squeeze(2) * non_zero_mask_results.unsqueeze(-1)
+
+
+            smp_pos = smp_pos + smp_pos_add
+            smp_vel = smp_vel + smp_vel_add
 
 
         return smp_pos, smp_vel

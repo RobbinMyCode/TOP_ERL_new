@@ -9,7 +9,8 @@ def get_splits(times, split_strategy: dict={"split_strategy": "n_equal_splits", 
 
         split_size_list = [default_split] * n_splits
         if times.size(-1) > n_splits * default_split:
-            split_size_list.append(times.size(-1) - n_splits * default_split)
+            for i in range(times.size(-1) - n_splits * default_split):
+                split_size_list[-(i+1)] += 1
 
     elif split_strategy['split_strategy'] == "fixed_max_size":
         default_split = int(split_strategy["split_size"])

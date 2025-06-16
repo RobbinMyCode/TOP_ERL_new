@@ -122,6 +122,11 @@ class TopErlSampler(BlackBoxSampler):
         list_episode_init_time = list()
         list_episode_init_pos = list()
         list_episode_init_vel = list()
+
+        list_segment_wise_init_pos = list()
+        list_segment_wise_init_vel = list()
+
+
         list_episode_reward = list()
 
         list_step_states = list()
@@ -192,6 +197,7 @@ class TopErlSampler(BlackBoxSampler):
                 list_split_indexes[i] = split_list[i-1] + list_split_indexes[i-1] #steps from previous steps + sum of steps before
             assert list_split_indexes[-1] == num_times - split_list[-1]
 
+
             for split_iteration, split in enumerate(split_list):
                 #repetition of episode_inits from new assessment further down
                 #and torchify it for use
@@ -202,6 +208,20 @@ class TopErlSampler(BlackBoxSampler):
                 episode_init_time = episode_init_state[..., -num_dof * 2 - 1]
                 episode_init_pos = episode_init_state[..., -num_dof * 2: -num_dof]
                 episode_init_vel = episode_init_state[..., -num_dof:]
+                if split_iteration == 0:
+                    segment_init_vel = torch.zeros((len(split_list), *episode_init_vel.size()),
+                                                   device=self.device)
+                    segment_init_pos = torch.zeros((len(split_list), *episode_init_pos.size()),
+                                                   device=self.device)
+
+                if split_iteration < len(split_list) - 1:
+                    segment_init_vel[split_iteration] = episode_init_vel
+                    segment_init_pos[split_iteration] = episode_init_pos
+                else:
+                    list_segment_wise_init_vel.append(segment_init_vel)
+                    list_segment_wise_init_pos.append(segment_init_pos)
+                    segment_init_vel = torch.zeros((len(split_list), *episode_init_state[..., -num_dof * 2 - 1].size()), device=self.device)
+                    segment_init_pos = torch.zeros((len(split_list), *episode_init_state[..., -num_dof * 2 - 1].size()), device=self.device)
 
                 # Policy prediction, we remove the desired position and velocity
                 # from observations
@@ -396,14 +416,20 @@ class TopErlSampler(BlackBoxSampler):
         results["step_dones"] = step_dones
         results["step_time_limit_dones"] = step_time_limit_dones
 
-        results["split_start_indexes"] = torch.tensor(list_split_indexes)  ### these are start-indexes of the specific split (e.g. [0, 25, 50, 75]) for a splitsize of 25
+        results["split_start_indexes"] = torch.tensor(list_split_indexes)[None, :]  ### these are start-indexes of the specific split (e.g. [0, 25, 50, 75]) for a splitsize of 25
         results["total_time_list"] = step_times.to("cpu").numpy()
 
+
+        #TODO: episode_reward = sum of all step_rewards (100 steps)
         results["episode_reward"] = torch.cat(list_episode_reward, dim=0)
 
         results["episode_init_time"] = torch.cat(list_episode_init_time, dim=0)
         results["episode_init_pos"] = torch.cat(list_episode_init_pos, dim=0)
         results["episode_init_vel"] = torch.cat(list_episode_init_vel, dim=0)
+
+        results["segment_wise_init_pos"] = torch.cat(list_segment_wise_init_pos, dim=0)
+        results["segment_wise_init_vel"] = torch.cat(list_segment_wise_init_vel, dim=0)
+
         results["episode_init_idx"] = torch.cat(list_episode_init_idx, dim=0)
         results["episode_params_mean"] = \
             torch.cat(list_episode_params_mean, dim=0)
