@@ -35,11 +35,13 @@ class TopErlPolicy(BlackBoxPolicy):
         self.num_dof = self.mp.num_dof
 
     def get_param_indexes(self, times, split_list, ref_time_list):
-        split_starts = [0]*len(split_list)
+        split_starts = np.array([0]*len(split_list))
         for i in range(1, len(split_list)):
-            split_starts[i] = split_starts[i-1] + split_list[i]
+            split_starts[i] = split_starts[i-1] + split_list[i-1]
 
-        split_start_time_steps = ref_time_list[split_starts].to(self.device)
+        #invalid values get assigned first index here, then invalid times get added (total time + 1) -> never < sth in times
+        valid = split_starts < ref_time_list.shape[-1]
+        split_start_time_steps = ref_time_list[split_starts * valid].to(self.device) + torch.tensor(~valid, device=self.device) * (max(ref_time_list) + 1)
 
         condition_reached =  times[..., None] >= split_start_time_steps
         policy_indexes = torch.sum(condition_reached, axis=-1) - 1

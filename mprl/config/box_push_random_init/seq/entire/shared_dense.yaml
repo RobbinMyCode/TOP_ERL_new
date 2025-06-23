@@ -100,7 +100,7 @@ params:
           #-> goal parameter loses direct meaning as goal is not reachable in the used step size but would need last interval start+total_steps
 
     split_strategy: "random_size_range" #n_equal_splits, random_size_range, random_gauss, alternating_ranges
-    random_permute_splits: false #e.g. splitsizes = [12,15,36,0] -> permute that list before assignment, usable for ALL splits
+    random_permute_splits: true #e.g. splitsizes = [12,15,36,0] -> permute that list before assignment, usable for ALL splits
     split_size: 13      #required for split strategy "fixed_max_size" (adds an other smaller split at the end if num_times % split_size != 0
     n_splits: 3        #MOST IMPORTANT: defines how many policy splits will be allowed
                         #also required for split_strategy "n_equal_splits" (if n equal sized are impossible, ITS CURRENTLY NOT SUPPORTED)
