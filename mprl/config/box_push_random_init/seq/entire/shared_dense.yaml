@@ -1,7 +1,7 @@
 # Global config
 exp_name: &exp_name "box_random_seq_entire"
 exp_path: &exp_path "../../mprl_exp_result"
-sub_exp_name: &sub_exp_name "dense, verify after split the critic and policy updates."
+sub_exp_name: &sub_exp_name "q_loss continuing, v_func truncated"
 act_func_hidden: &act_func_hidden leaky_relu
 act_func_last: &act_func_last null
 dtype: &dtype "float32"
@@ -44,8 +44,8 @@ params:
       use_old_policy: true  # use a target policy as the old policy for the trust region projection
       old_policy_update_rate: 0.005  # update rate for the old policy from the current policy
       batch_size: 512
-      critic_update_from: 1 #300
-      policy_update_from: 2 #2000
+      critic_update_from: 1 # 300
+      policy_update_from: 1 # 2000
       dtype: *dtype
       device: *device
 
@@ -70,6 +70,7 @@ params:
 
   policy:
     type: TopErlPolicy
+    include_pos_in_forcing_terms: false
     args:
       mean_net_args:
         avg_neuron: 256
@@ -92,22 +93,28 @@ params:
       #options: current_idx and "as_zero"
         #curr idx: every split gets time indexes fitting to the corresponding part of the trajectory
           #-> all individual basically start at end at the same spots, but vary in form [and previous steps all get cut out]--> parameters mean the same for all
+        ############################################################
+        # USE current_idx, as_zero CURRENTLY NOT FULLY IMPLEMENTED!#
+        ############################################################
         #as_zero: every split will start at time index 0 --> each split starts at the current starting position [all steps after total step size get cut out]
           #-> goal parameter loses direct meaning as goal is not reachable in the used step size but would need last interval start+total_steps
 
-    split_strategy: "n_equal_splits"
+    split_strategy: "random_size_range" #n_equal_splits, random_size_range, random_gauss, alternating_ranges
+    random_permute_splits: false #e.g. splitsizes = [12,15,36,0] -> permute that list before assignment, usable for ALL splits
     split_size: 13      #required for split strategy "fixed_max_size" (adds an other smaller split at the end if num_times % split_size != 0
-    n_splits: 4        #MOST IMPORTANT: defines how many policy splits will be allowed
+    n_splits: 3        #MOST IMPORTANT: defines how many policy splits will be allowed
                         #also required for split_strategy "n_equal_splits" (if n equal sized are impossible, ITS CURRENTLY NOT SUPPORTED)
-
-    size_range: [5,25]  #required for split_strategy "random_size_range"
+    ranges: [50, 35, 10, 5] #required for alternating_ranges --> number of steps assigned at random for each policy, len(ranged) = n_splits (else error)
+    size_range: [50,70]  #required for split_strategy "random_size_range"
     mean_std: [10,5]    #required for split_strategy "random_gauss"
 
     q_loss_strategy: "start_unchanged" #"truncated" #q-loss is updated via time-slices --> this determines how the time-sliced get cut for the update
                                  #"truncated" --> one slice only for one parameter segment -> cut off parts that are not created with the same policy parameters
                                  #"start_unchanged" --> each slice has a startpoint from sampling saved in the replay buffer, with this sampling method
                                                       # bigger gaps between two consecutive segments which use different parameters may occur, but the policies start with "known startpoints"
-    v_func_estimation: "truncated"
+                                 #"continuing" --> take last reached point of previous policy as init point for next segment (parameters are set to fit a different point then)-> may also cause issues
+    v_func_estimation: "truncated" #truncated, continuing or "overconfident"
+                                  #overconfident: policy which is responsible for init time predicts entire sequence for v-func estimation
   critic:
     type: TopErlCritic
     args:

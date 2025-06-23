@@ -65,6 +65,7 @@ class MPExperimentMultiProcessing(experiment.AbstractIterativeExperiment):
         cfg["sampler"]["args"]["reference_split"] = cfg["reference_split"]
         cfg["agent"]["args"]["reference_split"] = cfg["reference_split"]
         cfg["critic"]["args"]["reference_split"] = cfg["reference_split"]
+        cfg["sampler"]["args"]["include_pos_in_forcing_terms"] = cfg["policy"]["include_pos_in_forcing_terms"]
 
         cpu_cores = cw_config.get("cpu_cores", None)
         if cpu_cores is None:
@@ -104,14 +105,18 @@ class MPExperimentMultiProcessing(experiment.AbstractIterativeExperiment):
         state_dim = self.get_dim_in(cfg, self.sampler)
         policy_out_dim = self.dim_policy_out(cfg)
 
+
+        num_dof = cfg["mp"]["args"]["num_dof"]
+        action_dim = num_dof * 2
+
         self.policy = policy_factory(cfg["policy"]["type"],
-                                     dim_in=state_dim,
-                                     dim_out=policy_out_dim,
-                                     **cfg["policy"]["args"])
-        action_dim = self.policy.num_dof * 2
+                                      dim_in=state_dim if not cfg["policy"][
+                                          "include_pos_in_forcing_terms"] else state_dim + num_dof,
+                                      dim_out=policy_out_dim,
+                                      **cfg["policy"]["args"])
 
         self.critic = critic_factory(cfg["critic"]["type"],
-                                     state_dim=state_dim,
+                                     state_dim=state_dim if not cfg["policy"]["include_pos_in_forcing_terms"] else state_dim+num_dof,
                                      action_dim=action_dim,
                                      **cfg["critic"]["args"])
         self.projection = projection_factory(
@@ -132,7 +137,7 @@ class MPExperimentMultiProcessing(experiment.AbstractIterativeExperiment):
         traj_length = self.sampler.num_times
 
         replay_buffer_data_shape = {
-            "step_states": (traj_length, state_dim),
+            "step_states": (traj_length, state_dim) if not cfg["policy"]["include_pos_in_forcing_terms"] else (traj_length, state_dim+num_dof),
             "step_desired_pos": (traj_length, self.policy.num_dof),
             "step_desired_vel": (traj_length, self.policy.num_dof),
             "step_actions": (traj_length, action_dim),

@@ -30,6 +30,10 @@ class TopErlSampler(BlackBoxSampler):
         #get reference split args
         self.reference_split_args = kwargs.get("reference_split", {'split_strategy': 'fixed_max_size', 'split_size': 1e100})
 
+        #decide maximum info for forcing terms
+        self.include_pos_in_forcing_terms = kwargs.get("include_pos_in_forcing_terms", False)
+
+
         # If episode is too long, such as Metaworld, we can down sample the
         # trajectory when update the policy and critic
         self.traj_downsample_factor = kwargs.get("traj_downsample_factor", None)
@@ -123,6 +127,7 @@ class TopErlSampler(BlackBoxSampler):
         list_episode_init_pos = list()
         list_episode_init_vel = list()
 
+
         list_segment_wise_init_pos = list()
         list_segment_wise_init_vel = list()
 
@@ -176,6 +181,8 @@ class TopErlSampler(BlackBoxSampler):
             # Storage for policy results
             list_episode_params_mean = list()  # Policy mean
             list_episode_params_L = list()  # Policy covariance cholesky
+            list_segment_wise_init_pos_it = list()
+            list_segment_wise_init_vel_it = list()
 
             # Get time steps for traj generation
             step_times = self.get_times(episode_init_time, num_times,
@@ -195,7 +202,11 @@ class TopErlSampler(BlackBoxSampler):
             list_split_indexes[0] = 0
             for i in range(1, len(split_list)):
                 list_split_indexes[i] = split_list[i-1] + list_split_indexes[i-1] #steps from previous steps + sum of steps before
-            assert list_split_indexes[-1] == num_times - split_list[-1]
+
+                #avoid out of bounds for tailing zero splits
+                if list_split_indexes[i] == np.sum(split_list):
+                    list_split_indexes[i] = list_split_indexes[i] -1
+            assert list_split_indexes[-1] == min(num_times - split_list[-1], num_times - 1)
 
 
             for split_iteration, split in enumerate(split_list):
@@ -218,15 +229,26 @@ class TopErlSampler(BlackBoxSampler):
                     segment_init_vel[split_iteration] = episode_init_vel
                     segment_init_pos[split_iteration] = episode_init_pos
                 else:
-                    list_segment_wise_init_vel.append(segment_init_vel)
-                    list_segment_wise_init_pos.append(segment_init_pos)
+                    list_segment_wise_init_vel_it.append(segment_init_vel)
+                    list_segment_wise_init_pos_it.append(segment_init_pos)
                     segment_init_vel = torch.zeros((len(split_list), *episode_init_state[..., -num_dof * 2 - 1].size()), device=self.device)
                     segment_init_pos = torch.zeros((len(split_list), *episode_init_state[..., -num_dof * 2 - 1].size()), device=self.device)
 
                 # Policy prediction, we remove the desired position and velocity
                 # from observations
-                episode_params_mean, episode_params_L = \
-                    policy.policy(episode_init_state[..., :-num_dof * 2])
+                #FIRST TWO CASES ONLY IF GRIPPER POSITION IS USED AS VARIABLE FOR GENERATED FORCES (if no pos given: set to 0, else take last)
+                if split_iteration == 0 and ep_idx == 0 and self.include_pos_in_forcing_terms:
+                    episode_params_mean, episode_params_L = \
+                        policy.policy(torch.cat([episode_init_state[..., :-num_dof * 2],
+                                                torch.zeros((*episode_init_state.size()[:-1], num_dof), device=self.device)],
+                                                dim=-1))
+                elif self.include_pos_in_forcing_terms:
+                    episode_params_mean, episode_params_L = \
+                        policy.policy(torch.cat([episode_init_state[..., :-num_dof * 2],
+                                                 step_actions[..., -1,  :step_actions.size(-1)//2]], dim=-1))
+                else:
+                    episode_params_mean, episode_params_L = \
+                        policy.policy(episode_init_state[..., :-num_dof * 2])
 
                 assert_shape(episode_params_mean, [num_env, dim_mp_params])
                 assert_shape(episode_params_L,
@@ -241,17 +263,23 @@ class TopErlSampler(BlackBoxSampler):
                     list_episode_params_mean.append(episode_params_mean_tensor)
                     list_episode_params_L.append(episode_params_L_tensor)
 
-                step_actions = policy.sample(require_grad=False,
-                                             params_mean=episode_params_mean,
-                                             params_L=episode_params_L,
-                                             times=step_times[..., ref_split_start_idx : ref_split_start_idx+split],
-                                             init_time=episode_init_time if split_iteration==0 or self.reference_split_args["correction_completion"] == "as_zero" \
-                                                 else step_times[..., ref_split_start_idx-1],
-                                             init_pos=episode_init_pos,
-                                             init_vel=episode_init_vel,
-                                             use_mean=deterministic,
-                                             ref_time = step_times[0],
-                                             split_args={"split_strategy": "n_equal_splits", "n_splits": 1})
+                if split != 0:
+                    step_actions = policy.sample(require_grad=False,
+                                                 params_mean=episode_params_mean,
+                                                 params_L=episode_params_L,
+                                                 times=step_times[..., ref_split_start_idx : ref_split_start_idx+split],
+                                                 init_time=episode_init_time if split_iteration==0 or self.reference_split_args["correction_completion"] == "as_zero" \
+                                                     else step_times[..., ref_split_start_idx-1],
+                                                 init_pos=episode_init_pos,
+                                                 init_vel=episode_init_vel,
+                                                 use_mean=deterministic,
+                                                 ref_time = step_times[0],
+                                                 split_args={"split_strategy": "n_equal_splits", "n_splits": 1, "random_permute_splits": False})
+
+                # STEP_ACTION = NO MOVEMENT / DEFAULT POSITION
+                else:
+                    step_actions = torch.zeros((*step_times.size()[:-1], 1, num_dof*2), device=self.device)
+
 
 
                 if self.reference_split_args["correction_completion"] == "current_idx":
@@ -263,114 +291,143 @@ class TopErlSampler(BlackBoxSampler):
                                               f"Valid are 'current_idx' to use time steps as they are assigned for replanning"
                                               " or 'as_zero' to set the replanning reference point at timestep 0 "
                                               "[so created trajectory full would be > total steps] and gets cut accordingly")
-                assert_shape(step_actions, [num_env, split, num_dof * 2])
+                assert_shape(step_actions, [num_env, max(split,1), num_dof * 2])
 
                 if split_iteration == 0:
                     step_actions_tensor = torch.zeros(*step_actions.size()[:-2], num_times, step_actions.size(-1))
-                step_actions_tensor[..., split_start_idx: split_start_idx+split, :] = step_actions
+
+                #need to check split == 0 everywhere, as minimum one step_action is sampled
+                if split != 0:
+                    step_actions_tensor[..., split_start_idx: split_start_idx+split, :] = step_actions
 
 
                 # Observation, reward, done, info
                 # Here, the gymnasium step() API get suppressed by stable-baseline3
                 # So we get 4 return elements rather than 5
-                next_episode_init_state, episode_reward, _, step_infos = \
-                    envs.step(to_np(step_actions))
+                #cant do that if we have a 0 split
+                if split != 0:
+                    next_episode_init_state, episode_reward, _, step_infos = \
+                        envs.step(to_np(step_actions))
 
-                # Step states and values
-                step_states = util.get_item_from_dicts(step_infos, "step_states")
-                step_states = to_ts(np.asarray(step_states),
-                                    self.dtype, self.device)
-                assert_shape(step_states, [num_env, split, dim_obs])
+                # Step states and values, only useful when an actual split is done, not an empty one
+                if split != 0:
+                    step_states = util.get_item_from_dicts(step_infos, "step_states")
+                    step_states = to_ts(np.asarray(step_states),
+                                        self.dtype, self.device)
+                    try:
+                        assert_shape(step_states, [num_env, split, dim_obs])
+                    except AssertionError:
+                        exit("Shape mismatch")
+
+                    #DONE TODO: Optional augment step_states to include step_actions -> condition parameters(-> forces) on initial position
+                    #only position --> first half of step_actions (second half = velocities)
+                    if self.include_pos_in_forcing_terms:
+                        step_states = torch.cat([step_states, step_actions[..., :step_actions.size(-1)//2]], dim=-1)
+
+                    # Exclude robot desired pos and vel from state (only add at valid splits, else no information gained)
+
+                    if np.sum(split_list[:split_iteration]) == 0 and split != 0:
+                        # Include the initial state into step states
+                        if self.include_pos_in_forcing_terms:
+                            init_add = torch.cat([episode_init_state, step_actions[..., 0,  :step_actions.size(-1)//2]], dim=-1)
+                        else:
+                            init_add = episode_init_state
+
+                        step_states = torch.cat([init_add[:, None], step_states], dim=-2)
+                        step_states_tensor = torch.zeros(*step_states.size()[:-2], num_times+1, step_states.size(-1))
+                        step_states_tensor[..., split_start_idx:split_start_idx + split + 1, :] = step_states
+                    else:
+                        step_states_tensor[..., split_start_idx:split_start_idx + split, :] = step_states
 
 
-                # Exclude robot desired pos and vel from state
-                if split_iteration == 0:
-                    # Include the initial state into step states
-                    step_states = torch.cat([episode_init_state[:, None],
-                                             step_states], dim=-2)
-                    step_states_tensor = torch.zeros(*step_states.size()[:-2], num_times+1, step_states.size(-1))
-                    step_states_tensor[..., split_start_idx:split_start_idx + split + 1, :] = step_states
-                else:
-                    step_states_tensor[..., split_start_idx:split_start_idx + split, :] = step_states
 
 
+                # Overwrite the initial state (if any valid steps are done)
+                if split != 0:
+                    episode_init_state = next_episode_init_state
 
+                    # Step rewards
+                    step_rewards = util.get_item_from_dicts(step_infos, "step_rewards")
+                    step_rewards = to_ts(np.asarray(step_rewards),
+                                         self.dtype, self.device)
+                    assert_shape(step_rewards, [num_env, max(split,1)])
 
-                # Overwrite the initial state
-                episode_init_state = next_episode_init_state
-                # Step rewards
-                step_rewards = util.get_item_from_dicts(step_infos, "step_rewards")
-                step_rewards = to_ts(np.asarray(step_rewards),
-                                     self.dtype, self.device)
-                assert_shape(step_rewards, [num_env, split])
+                    # Turn Non-MDP rewards into MDP rewards if necessary
+                    step_rewards = util.make_mdp_reward(task_id=self.env_id,
+                                                        step_rewards=step_rewards,
+                                                        step_infos=step_infos,
+                                                        dtype=self.dtype,
+                                                        device=self.device)
 
-                # Turn Non-MDP rewards into MDP rewards if necessary
-                step_rewards = util.make_mdp_reward(task_id=self.env_id,
-                                                    step_rewards=step_rewards,
-                                                    step_infos=step_infos,
-                                                    dtype=self.dtype,
-                                                    device=self.device)
-
-                # Scale the reward, only when trajectory is down sampled
-                # during policy and critic update
-                step_rewards = step_rewards * self.reward_scaling
+                    # Scale the reward, only when trajectory is down sampled
+                    # during policy and critic update
+                    step_rewards = step_rewards * self.reward_scaling
 
                 # Store step rewards
-                if split_iteration == 0:
+                if np.sum(split_list[:split_iteration]) == 0 and split != 0:
                     step_rewards_tensor = torch.zeros(*step_rewards.size()[:-1], num_times)
-                step_rewards_tensor[..., split_start_idx:split_start_idx+split] = step_rewards
 
+                if split != 0:
+                    step_rewards_tensor[..., split_start_idx:split_start_idx+split] = step_rewards
 
-                # Episode rewards
-                #episode reward only exists for reaching goal -> sufficient as reward of last segment
-                assert_shape(episode_reward, [num_env])
-                episode_reward = to_ts(np.asarray(episode_reward),
-                                       self.dtype, self.device)
+                    #only if split != 0, bcause else there will not be a reward
+                    # Episode rewards
+                    #episode reward only exists for reaching goal -> sufficient as reward of last segment
+                    assert_shape(episode_reward, [num_env])
+                    episode_reward = to_ts(np.asarray(episode_reward),
+                                           self.dtype, self.device) * int(split!=0) * int(split != 0)
 
-                if split_iteration == len(split_list) -1:
+                if np.sum(split_list[:split_iteration]) == 0 and split != 0: #first non-zero element
                     list_episode_reward.append(episode_reward)
+                elif split != 0:
+                    list_episode_reward[-1] += episode_reward
 
-                # Step dones, adapt to new gymnasium interface
-                step_terminations = util.get_item_from_dicts(step_infos,
-                                                             "step_terminations")
-                step_truncations = util.get_item_from_dicts(step_infos,
-                                                            "step_truncations")
+                # Step dones, adapt to new gymnasium interface, only makes sense for nonzero splits
+                if split != 0:
+                    step_terminations = util.get_item_from_dicts(step_infos,
+                                                                 "step_terminations")
+                    step_truncations = util.get_item_from_dicts(step_infos,
+                                                                "step_truncations")
 
-                step_terminations = to_ts(np.asarray(step_terminations),
-                                          torch.bool, self.device)
-                step_truncations = to_ts(np.asarray(step_truncations),
-                                         torch.bool, self.device)
+                    step_terminations = to_ts(np.asarray(step_terminations),
+                                              torch.bool, self.device)
+                    step_truncations = to_ts(np.asarray(step_truncations),
+                                             torch.bool, self.device)
 
-                step_dones = torch.logical_or(step_terminations, step_truncations)
+                    step_dones = torch.logical_or(step_terminations, step_truncations)
 
-                assert_shape(step_dones, [num_env, split])
+                    assert_shape(step_dones, [num_env, split])
 
-                if split_iteration == 0:
+                if np.sum(split_list[:split_iteration]) == 0 and split != 0:
                     step_dones_tensor = torch.zeros(*step_dones.size()[:-1], num_times)
-                step_dones_tensor[..., split_start_idx:split_start_idx+split] = step_dones
+
+                if split != 0:
+                    step_dones_tensor[..., split_start_idx:split_start_idx+split] = step_dones
 
                 #####################################
                 #START INDEX FOR NEXT SPLIT ITERATION
                 split_start_idx += split
                 #####################################
 
-                # Update training steps
-                episode_length = util.get_item_from_dicts(
-                    step_infos, "segment_length")
-                num_total_env_steps += np.asarray(episode_length).sum()
+                # Update training steps (0 for split==0, but step_info not given
+                if split != 0:
+                    episode_length = util.get_item_from_dicts(
+                        step_infos, "segment_length")
+                    num_total_env_steps += np.asarray(episode_length).sum()
 
                 # Task specified metrics
-                if self.task_specified_metrics is not None:
-                    for metric in self.task_specified_metrics:
-                        metric_value = \
-                            util.get_item_from_dicts(step_infos,
-                                                     metric, lambda x: x[-1])
+                if split != 0:
+                    if self.task_specified_metrics is not None:
+                        for metric in self.task_specified_metrics:
+                            metric_value = \
+                                util.get_item_from_dicts(step_infos,
+                                                         metric, lambda x: x[-1])
 
-                        metric_value = \
-                            to_ts(metric_value, self.dtype, self.device)
-                        #task specific metrics are usually only dependend on last bit (success, ...)
-                        if split_iteration == len(split_list) - 1:
-                            dict_task_specified_metrics[metric].append(metric_value)
+                            metric_value = \
+                                to_ts(metric_value, self.dtype, self.device)
+                            #task specific metrics are usually only dependend on last bit (success, ...)
+                            if split_iteration == len(split_list) - 1 or np.sum(split_list[split_iteration+1:]) == 0:
+                                dict_task_specified_metrics[metric].append(metric_value)
 
             list_step_states.append(step_states_tensor[..., :-num_dof * 2])
             list_step_desired_pos.append(
@@ -379,6 +436,8 @@ class TopErlSampler(BlackBoxSampler):
             list_step_actions.append(step_actions_tensor)
             list_step_rewards.append(step_rewards_tensor)
             list_step_dones.append(step_dones_tensor)
+            list_segment_wise_init_pos.append(torch.cat(list_segment_wise_init_pos_it, dim=0).permute(1,0,2) )
+            list_segment_wise_init_vel.append(torch.cat(list_segment_wise_init_vel_it, dim=0).permute(1, 0, 2))
 
         # Step-wise data
         step_actions = torch.cat(list_step_actions, dim=0)
@@ -420,14 +479,18 @@ class TopErlSampler(BlackBoxSampler):
         results["total_time_list"] = step_times.to("cpu").numpy()
 
 
-        #TODO: episode_reward = sum of all step_rewards (100 steps)
+        #DONE (l331-333): episode_reward = sum of all step_rewards (100 steps)
         results["episode_reward"] = torch.cat(list_episode_reward, dim=0)
 
         results["episode_init_time"] = torch.cat(list_episode_init_time, dim=0)
         results["episode_init_pos"] = torch.cat(list_episode_init_pos, dim=0)
         results["episode_init_vel"] = torch.cat(list_episode_init_vel, dim=0)
 
-        results["segment_wise_init_pos"] = torch.cat(list_segment_wise_init_pos, dim=0)
+        #must be permuted as we want it first sample wise then segment wise
+        try:
+            results["segment_wise_init_pos"] = torch.cat(list_segment_wise_init_pos, dim=0)
+        except:
+            exit(1)
         results["segment_wise_init_vel"] = torch.cat(list_segment_wise_init_vel, dim=0)
 
         results["episode_init_idx"] = torch.cat(list_episode_init_idx, dim=0)

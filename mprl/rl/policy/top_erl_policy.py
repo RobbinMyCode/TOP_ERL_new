@@ -77,9 +77,6 @@ class TopErlPolicy(BlackBoxPolicy):
 
         #get indexes->timesteps at which the policy changes --> cut off point
         mask = policy_start_indexes.unsqueeze(-1) == policy_indexes
-        #first_diff = torch.argmax(mask.int(), dim=-1) #argmax returns first largest entry (either 0=False or 1=True) --> first match
-        #first_diff[~mask.any(dim=-1)] = policy_indexes.size(-1)
-
 
         iteration_sample_func_kwargs = dict()
         for key in sample_func_kwargs:
@@ -95,9 +92,23 @@ class TopErlPolicy(BlackBoxPolicy):
         smp_pos_1, smp_vel_1 = \
             sample_func(times=times, **iteration_sample_func_kwargs)
 
-        #zero out timesteps that should not have been used
+        # zero out timesteps that should not have been used
         smp_pos = smp_pos_1.squeeze(2) * mask.unsqueeze(-1)
         smp_vel= smp_vel_1.squeeze(2) * mask.unsqueeze(-1)
+
+        ####################################################################################################
+        # create positions + velocities after timestep which corresponds to first change in parameter
+        ####################################################################################################
+        # strategies:   1) continue from replay_buffer initial conditions
+        #                   [-> params of trajectory are guaranteed to make sense but path may have jumps]
+        #               2) continue from last position reached so far
+        #                   [-> smooth path but params may not be good for the current area]
+        #               3) truncate -> just ignore everything to "not do anything incorrect" but limit information used
+        #               4) overconfidence -> first set of parameters that is used in the sequence evaluates the rest aswell
+        ####################################################################################################
+
+        if splitting.get("q_loss_strategy", "truncated") == "overconfident":
+            return smp_pos_1, smp_vel_1
 
         if splitting.get("q_loss_strategy", "truncated") == "truncated":
             #repeat the last valid entry for the rest of the tensor in the respective axis
@@ -118,19 +129,13 @@ class TopErlPolicy(BlackBoxPolicy):
             smp_vel = smp_vel + addition_vel * ~mask.unsqueeze(-1)
             return smp_pos, smp_vel
 
+        #limit number of iterations to not waste too much recources
         #example: splits [25,25,25,25] -> need 26 steps to be able to have 2 changes of reference policy parameters (just to save time with leaving out unnecessary iterations)
-        max_remaining_iterations = max(times.size(-1) // np.min(split_size_list) + 1, len(split_size_list)-1)
-
-        for iteration in range(max_remaining_iterations): #maximum possible loop of different used policy parameters
-            #SOLUTION OF DGL SHOULD BE INDEPENDEND ON WHIH START CONDITION ONE USES, SO WE CAN JUST REUSE THE PREVIOUS ONES
-            #new breaking point 1 index higher, else the same
-            #TODO: Option 1) get additional init pos from different parts from replay buffer -> use as init condition'
-            #DONE Option 2) truncate at the end of one policy param pair (no further steps or equivalently repeat last valid step)
-            #TODO Option 3) initial condition = last step of previous segment (not from replay buffer)
-
+        max_remaining_iterations = max(times.size(-1) // max(1, np.min(split_size_list)) + 1, len(split_size_list)-1) #max(np.min(..), 1) so we do not divide by 0)
+        for iteration in range(max_remaining_iterations):
             # new index = +=1 or max index in that axis if index+1 > max valid index
             policy_start_indexes = torch.minimum(policy_start_indexes + 1,
-                                                 (splitting["segment_wise_init_pos"].size(-2) -1) * torch.ones(policy_start_indexes.size(), device=self.device)).to(torch.int32)
+                                                 (len(split_size_list) -1) * torch.ones(policy_start_indexes.size(), device=self.device)).to(torch.int32)
 
 
             if splitting.get("q_loss_strategy", "truncated") == "start_unchanged":
@@ -138,10 +143,21 @@ class TopErlPolicy(BlackBoxPolicy):
                 iteration_sample_func_kwargs["init_pos"] = torch.gather(splitting["segment_wise_init_pos"], index=segment_init_indexes.to(torch.int64), dim=-2)
                 iteration_sample_func_kwargs["init_vel"] = torch.gather(splitting["segment_wise_init_vel"], index=segment_init_indexes.to(torch.int64), dim=-2)
 
-                #next init time reference is always one step prior start of next split
-                init_idx = torch.tensor(split_start_indexes, device=self.device)[policy_start_indexes] - 1
-                iteration_sample_func_kwargs["init_time"] = ref_time_list[init_idx]
+            #next init time reference is always one step prior start of next split
+            init_idx = torch.tensor(split_start_indexes, device=self.device)[policy_start_indexes] - 1
+            iteration_sample_func_kwargs["init_time"] = ref_time_list[init_idx]
 
+            if splitting.get("q_loss_strategy", "truncated") == "continuing":
+                counted_mask = torch.arange(smp_pos.size(-2), device=self.device)[None, None, :] * mask
+                maxed_mask = torch.where(counted_mask == torch.argmax(counted_mask, dim=-1).unsqueeze(-1), 1.0, 0.0)
+
+                # residual to add = last valid entry of respective quantity
+                last_entry_pos = smp_pos * maxed_mask.unsqueeze(-1)
+                iteration_sample_func_kwargs["init_pos"] = torch.sum(last_entry_pos, dim=-2)
+
+                # analogous for velocity
+                last_entry_vel = smp_vel * maxed_mask.unsqueeze(-1)
+                iteration_sample_func_kwargs["init_vel"] = torch.sum(last_entry_vel, dim=-2)
 
             param_idx = policy_start_indexes.unsqueeze(-1).unsqueeze(-1).to(torch.int64).expand(-1, -1, 1, params.size(-1))
             param_update = torch.gather(params, dim=-2, index=param_idx).squeeze(-2)
@@ -159,7 +175,8 @@ class TopErlPolicy(BlackBoxPolicy):
 
             #mask off all entries, where a different params/params_L should have been used as 0 -> can be added on top
             non_zero_mask_results = policy_start_indexes.unsqueeze(-1) == policy_indexes
-
+            #for next iteration if "continuing" methodology
+            mask = non_zero_mask_results
 
             smp_pos_add = smp_pos_add_i.squeeze(2) * non_zero_mask_results.unsqueeze(-1)
             smp_vel_add = smp_vel_add_i.squeeze(2) * non_zero_mask_results.unsqueeze(-1)
@@ -204,7 +221,7 @@ class TopErlPolicy(BlackBoxPolicy):
         smp_pos, smp_vel = \
             sample_func(times=times[..., :split_size_list[0]], **sample_func_kwargs)
 
-        iteration_sample_func_kwargs = sample_func_kwargs
+        iteration_sample_func_kwargs = sample_func_kwargs.copy()
         iteration_sample_func_kwargs.pop('init_pos', None)
         iteration_sample_func_kwargs.pop('init_vel', None)
         iteration_sample_func_kwargs.pop('init_time', None)
@@ -212,7 +229,7 @@ class TopErlPolicy(BlackBoxPolicy):
             iteration_sample_func_kwargs['num_smp'] = 1 #only 1 sample per intermediate point/step, else we have exponentially many
 
 
-        # if we have multiple stops --> sample sub trajectories from there #TODO pararellize in case
+        # if we have multiple stops --> sample sub trajectories from there
         # initial conditions: time and pos+vel after first n time steps (after first sample_trajectories call)
         smp_pos_xn = smp_pos
         smp_vel_xn = smp_vel
@@ -222,6 +239,8 @@ class TopErlPolicy(BlackBoxPolicy):
         for time_split_idx in range(1, len(split_size_list)):
             #give just large enough tensors for pos and vel (no additional empty entries)
             curr_split_size = split_size_list[time_split_idx]
+            if curr_split_size == 0:
+                continue
             #pos_xn = torch.empty_like(smp_pos)[..., :curr_split_size, :]
             #vel_xn = torch.empty_like(smp_vel)[..., :curr_split_size, :]
             
@@ -254,6 +273,12 @@ class TopErlPolicy(BlackBoxPolicy):
 
             smp_pos = torch.cat([smp_pos, smp_pos_xn], dim=-2)
             smp_vel = torch.cat([smp_vel, smp_vel_xn], dim=-2)
+
+        return smp_pos, smp_vel
+
+    def sample_once(self, times, sample_func, **sample_func_kwargs):
+        smp_pos, smp_vel = \
+            sample_func(times=times, **sample_func_kwargs)
 
         return smp_pos, smp_vel
 
@@ -307,6 +332,8 @@ class TopErlPolicy(BlackBoxPolicy):
         use_case = split_args.get("use_case", "sampler")
         if use_case == "agent":
             split_sample_func = self.sample_splitted_partial_times
+        elif split_args == {"split_strategy": "n_equal_splits", "n_splits": 1}:
+            split_sample_func = self.sample_once
         else:
             split_sample_func = self.sample_splitted
 

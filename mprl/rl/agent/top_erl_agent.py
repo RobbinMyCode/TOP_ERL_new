@@ -196,9 +196,9 @@ class TopErlAgent(AbstractAgent):
         num_traj = states.shape[0]
 
         # Decision state
-        # [num_traj, dim_state]
-        #TODO: dataset["split_start_indexes"][0] is fine for same split sizes, but with varying/random it doesnt catch the full info
-        d_state = states[torch.arange(num_traj, device=self.device)][:, torch.tensor(dataset["split_start_indexes"][0])]
+        # [num_traj, n_splits, dim_state]
+        d_state = states[torch.arange(num_traj, device=self.device).unsqueeze(-1), dataset["split_start_indexes"]]
+
         if self.use_old_policy:
             with torch.no_grad():
                 params_mean_old, params_L_old = self.policy_old.policy(d_state)
