@@ -314,12 +314,9 @@ class TopErlSampler(BlackBoxSampler):
                     step_states = util.get_item_from_dicts(step_infos, "step_states")
                     step_states = to_ts(np.asarray(step_states),
                                         self.dtype, self.device)
-                    try:
-                        assert_shape(step_states, [num_env, split, dim_obs])
-                    except AssertionError:
-                        exit("Shape mismatch")
+                    assert_shape(step_states, [num_env, split, dim_obs])
 
-                    #DONE TODO: Optional augment step_states to include step_actions -> condition parameters(-> forces) on initial position
+                    #Optional augment step_states to include step_actions -> condition parameters(-> forces) on initial position
                     #only position --> first half of step_actions (second half = velocities)
                     if self.include_pos_in_forcing_terms:
                         step_states = torch.cat([step_states, step_actions[..., :step_actions.size(-1)//2]], dim=-1)
@@ -486,11 +483,7 @@ class TopErlSampler(BlackBoxSampler):
         results["episode_init_pos"] = torch.cat(list_episode_init_pos, dim=0)
         results["episode_init_vel"] = torch.cat(list_episode_init_vel, dim=0)
 
-        #must be permuted as we want it first sample wise then segment wise
-        try:
-            results["segment_wise_init_pos"] = torch.cat(list_segment_wise_init_pos, dim=0)
-        except:
-            exit(1)
+        results["segment_wise_init_pos"] = torch.cat(list_segment_wise_init_pos, dim=0)
         results["segment_wise_init_vel"] = torch.cat(list_segment_wise_init_vel, dim=0)
 
         results["episode_init_idx"] = torch.cat(list_episode_init_idx, dim=0)

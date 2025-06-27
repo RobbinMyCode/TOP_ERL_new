@@ -3,6 +3,13 @@ import numpy as np
 
 
 def get_splits(times, split_strategy: dict={"split_strategy": "n_equal_splits", "n_splits": 1}):
+    '''
+        computes splits of indexes giving times-tensor according to strategy defined in split_strategy
+        times: must be whole sequence -> size(-1) must be number of env interactions
+
+        return: split_size_list: list of number of time steps for each split
+            (e.g. [25, 58, 17] -> use params p1 for first 25, then p2 for 58 then p3 for 17 steps)
+    '''
     if split_strategy['split_strategy'] == "n_equal_splits":
         n_splits = int(split_strategy["n_splits"])
         default_split = times.size(-1) // n_splits
@@ -73,12 +80,13 @@ def get_splits(times, split_strategy: dict={"split_strategy": "n_equal_splits", 
         else:  # -> did not reahc end in n_splits-1 steps --> put rest in nth bucket
             split_size_list.append(times.size(-1) - total_size_covered)
 
-    elif split_strategy["split_strategy"] == "alternating_ranges":
+    elif split_strategy["split_strategy"] == "fixed_sizes":
         ranges = split_strategy["ranges"]
         if len(ranges) != int(split_strategy["n_splits"]):
             raise Exception(f"len(ranges): {len(ranges)} UNEQUAL number of splits: {split_strategy['n_splits']}")
+        if np.sum(ranges) != times.size(-1):
+            raise Exception(f"Total sum of ranges {ranges} -> {np.sum(ranges)} does NOT fit (is unequal to) total timesteps {times.size(-1)}")
         split_size_list = ranges
-        np.random.shuffle(split_size_list)
 
     else:
         print("Splitting strategy unknown: {}".format(split_strategy["split_strategy"]) + " possible strategies are "
@@ -86,7 +94,7 @@ def get_splits(times, split_strategy: dict={"split_strategy": "n_equal_splits", 
                                                                                      "n_equal_splits":       split into n equal parts (+one for the rest if num_samples is not a multiple)
                                                                                      "random_size_range":    randomized segment sizes, uniformly distributed from x to y (different values each call)
                                                                                      "random_gauss":         randomized segment sizes, gaussian distributed around mean with std
-                                                                                     "alternating_ranges":   segment sizes of fixed sizes, but which policy part gets which segment size is randomized
+                                                                                     "fixed_sizes":          segment sizes of fixed sizes
                                                                                      -> for every strategy if it does not fully cover the data and the next segment would "overcover" it a smaller segment is added in the end
                                                                                      args:
                                                                                          split_size: int                #required for split strategy "fixed_max_size"
@@ -96,6 +104,6 @@ def get_splits(times, split_strategy: dict={"split_strategy": "n_equal_splits", 
                                                                                          ranges: [int]*len(n_splits]    #required for split_strategy "alternating_ranges"
                                                                                          ''')
         raise KeyError
-    if split_strategy["random_permute_splits"]:
+    if split_strategy.get("random_permute_splits", False):
         np.random.shuffle(split_size_list)
     return split_size_list

@@ -65,7 +65,9 @@ class MPExperimentMultiProcessing(experiment.AbstractIterativeExperiment):
         cfg["sampler"]["args"]["reference_split"] = cfg["reference_split"]
         cfg["agent"]["args"]["reference_split"] = cfg["reference_split"]
         cfg["critic"]["args"]["reference_split"] = cfg["reference_split"]
-        cfg["sampler"]["args"]["include_pos_in_forcing_terms"] = cfg["policy"]["include_pos_in_forcing_terms"]
+
+        cfg["policy"]["include_pos_in_forcing_terms"] = cfg["policy"].get("include_pos_in_forcing_terms", False)
+        cfg["sampler"]["args"]["include_pos_in_forcing_terms"] = cfg["policy"].get("include_pos_in_forcing_terms", False)
 
         cpu_cores = cw_config.get("cpu_cores", None)
         if cpu_cores is None:

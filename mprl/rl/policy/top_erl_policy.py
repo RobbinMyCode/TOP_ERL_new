@@ -110,7 +110,7 @@ class TopErlPolicy(BlackBoxPolicy):
         ####################################################################################################
 
         if splitting.get("q_loss_strategy", "truncated") == "overconfident":
-            return smp_pos_1, smp_vel_1
+            return smp_pos_1.squeeze(2), smp_vel_1.squeeze(2)
 
         if splitting.get("q_loss_strategy", "truncated") == "truncated":
             #repeat the last valid entry for the rest of the tensor in the respective axis
