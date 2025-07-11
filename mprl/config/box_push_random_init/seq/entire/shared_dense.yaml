@@ -37,8 +37,8 @@ params:
       schedule_lr_critic: false
       entropy_penalty_coef: 0.0
       discount_factor: 1
-      epochs_policy: 15
-      epochs_critic: 30
+      epochs_policy: 15 #10-50
+      epochs_critic: 30 #10-50
       balance_check: *log_interval
       evaluation_interval: *log_interval
       use_old_policy: true  # use a target policy as the old policy for the trust region projection
@@ -135,8 +135,8 @@ params:
     type: KLProjectionLayer  # KL-projection
     args:
       proj_type: kl
-      mean_bound: 0.05
-      cov_bound: 0.0005
+      mean_bound: 0.05 #0.005 - 0.01
+      cov_bound: 0.0005 #0.00005 - 0.005
       trust_region_coeff: 1.0
       scale_prec: true
       entropy_schedule: linear  # Desired value is linear or exp or None
