@@ -16,11 +16,11 @@ experiment_copy_src:
 experiment_copy_auto_dst: "../../CODE_COPY/"
 ---
 name: box_random_seq_entire
-import_path: "./shared_dense.yaml"
+import_path: "./shared_dense_qcvt_lrx2.yaml"
 import_exp: "box_random_seq_entire"
 
 # cw2 config
-repetitions: 8      # Number of repetitions, each with different random seed, 2 or 4 for test, 20 for paper
+repetitions: 4      # Number of repetitions, each with different random seed, 2 or 4 for test, 20 for paper
 reps_per_job: 4
 reps_in_parallel: 4
 iterations: &iterations 35000

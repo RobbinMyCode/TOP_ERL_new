@@ -14,9 +14,9 @@ alias scpu_dev='salloc -p dev_cpuonly -n 1 -t 120 --mem=200000 --account=hk-proj
 
 
 # cd alias
-alias cdresult='cd ~/projects/seq_rl/SeqRL/mprl/result'
-alias cdconfig='cd ~/projects/seq_rl/SeqRL/mprl/config'
-alias cdmprl='cd ~/projects/seq_rl/SeqRL/mprl'
+alias cdresult='cd ~/Documents/Thesis_update/TOP_ERL_new/mprl/result'
+alias cdconfig='cd ~/Documents/Thesis_update/TOP_ERL_new/mprl/config'
+alias cdmprl='cd ~/Documents/Thesis_update/TOP_ERL_new/mprl'
 alias cds='cd ~/projects/seq_rl/mprl_exp_result/slurmlog'
 alias dlc='cd ~/projects/seq_rl && rm -r CODE_COPY/'
 
@@ -73,6 +73,7 @@ alias hopper_tce='runexp ./config/hopper_jump/tce/entire/horeka.yaml   -o -s'
 
 ## SeqRL Box Push Multi processing
 alias box_random_seq_dense='runexp_seq_multi_process ./config/box_push_random_init/seq/entire/horeka_dense.yaml   -o -s'
+alias box_random_seq_dense_robin='runexp_seq_multi_process ./config/box_push_random_init/seq/entire/slurm_dense.yaml   -o -s'
 alias box_random_seq_sparse='runexp_seq_multi_process ./config/box_push_random_init/seq/entire/horeka_sparse.yaml   -o -s'
 alias box_random_seq_local='runexp_seq_multi_process ./config/box_push_random_init/seq/entire/local.yaml   -o --nocodecopy'
 
