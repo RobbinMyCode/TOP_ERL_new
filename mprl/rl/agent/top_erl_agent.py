@@ -269,10 +269,11 @@ class TopErlAgent(AbstractAgent):
         traj_init_pos = dataset["step_desired_pos"] #desired_pos = end_pos of old trajectory at index
         traj_init_vel = dataset["step_desired_vel"]
 
-        #TODO: truncation not optimal, but cant just select incorrect start point for param 2
-        #TODO 0) check truncation in V is the problem (check everything else)
-        #TODO: 1) i) get parameters of policy 2 given the correct initial conditions from traj_init at its corr timestep    ii) use those params to continue from the last pos
-        #TODO: [[ 2) use policy outside its range of knowledge ]] (perhaps)
+        #TODONE: truncation not optimal, but cant just select incorrect start point for param 2
+        #TODONE 0) check truncation in V is the problem (check everything else)
+        #TODONE: 1) i) get parameters of policy 2 given the correct initial conditions from traj_init at its corr timestep    ii) use those params to continue from the last pos
+        #TODONE: [[ 2) use policy outside its range of knowledge ]] (perhaps)
+        # -> truncation seems the best
 
         num_segments = idx_in_segments.shape[0]
         num_seg_actions = idx_in_segments.shape[-1] - 1
