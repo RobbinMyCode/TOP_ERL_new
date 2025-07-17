@@ -4,8 +4,8 @@ partition: "accelerated"
 job-name: "box_random_seq_entire"
 num_parallel_jobs: 120
 ntasks: 1
-cpus-per-task: 152
-time: 20 # 1260 #600 for 10 hours
+cpus-per-task: 35
+time: 1260 #600 for 10 hours
 gpus_per_rep: 1
 scheduler: horeka
 sbatch_args:
