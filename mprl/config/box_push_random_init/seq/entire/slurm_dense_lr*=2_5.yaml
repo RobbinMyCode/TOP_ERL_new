@@ -1,11 +1,11 @@
 ---
 name: "SLURM"
 partition: "accelerated"
-job-name: "box_random_seq_entire"
+job-name: "box_random_seq_entire_lr*=2.5"
 num_parallel_jobs: 120
 ntasks: 1
 cpus-per-task: 152
-time: 30 #2000 #600 for 10 hours
+time: 2000 #600 for 10 hours
 gpus_per_rep: 1
 scheduler: horeka
 sbatch_args:
@@ -16,14 +16,14 @@ experiment_copy_src:
 experiment_copy_auto_dst: "../../CODE_COPY/"
 ---
 name: box_random_seq_entire
-import_path: "./shared_dense_qcvt_lrx2.yaml"
+import_path: "./shared_dense_lr*=2_5_hyperparam_search.yaml"
 import_exp: "box_random_seq_entire"
 
 # cw2 config
 repetitions: 2      # Number of repetitions, each with different random seed, 2 [for hyper paremtertuning 2] or 4 for test, 20 for paper
 reps_per_job: 4     # job id assigment
 reps_in_parallel: 4 #jobs run in parallel = # of gpus used
-iterations: &iterations 350 #35000
+iterations: &iterations 35000
 num_checkpoints: 1
 
 # Hardware specific parameters
@@ -37,3 +37,11 @@ params:
   projection:
     args:
       total_train_steps: *iterations
+
+grid:
+  projection:
+    type: KLProjectionLayer  # KL-projection
+    args:
+      proj_type: kl
+      mean_bound: [0.005, 0.01, 0.02, 0.05, 0.1] #0.05 #0.005 - 0.01
+      cov_bound: [0.00005, 0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005] #0.0005 #0.00005 - 0.005
