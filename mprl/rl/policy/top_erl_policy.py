@@ -34,16 +34,21 @@ class TopErlPolicy(BlackBoxPolicy):
         # self.mp.show_scaled_basis(True)
         self.num_dof = self.mp.num_dof
 
-    def get_param_indexes(self, times, split_list, ref_time_list):
-        split_starts = np.array([0]*len(split_list))
-        for i in range(1, len(split_list)):
-            split_starts[i] = split_starts[i-1] + split_list[i-1]
+    def get_param_indexes(self, times, split_list, ref_time_list, split_starts=[]):
+        if len(split_starts)==0:
+            split_starts = np.array([0]*len(split_list))
+            for i in range(1, len(split_list)):
+                split_starts[i] = split_starts[i-1] + split_list[i-1]
 
         #invalid values get assigned first index here, then invalid times get added (total time + 1) -> never < sth in times
         valid = split_starts < ref_time_list.shape[-1]
         split_start_time_steps = ref_time_list[split_starts * valid].to(self.device) + torch.tensor(~valid, device=self.device) * (max(ref_time_list) + 1)
 
-        condition_reached =  times[..., None] >= split_start_time_steps
+        if len(split_start_time_steps.shape) == 1:
+            condition_reached =  times[..., None] >= split_start_time_steps
+        else:
+            condition_reached = times[..., None] >= split_start_time_steps[..., None, None, :]
+
         policy_indexes = torch.sum(condition_reached, axis=-1) - 1
         policy_indexes[policy_indexes < 0] = 0
         return policy_indexes
@@ -57,16 +62,25 @@ class TopErlPolicy(BlackBoxPolicy):
         if "ref_time_list" in splitting:
             ref_time_list = splitting["ref_time_list"].to(self.device)
         times = times.to(self.device)
+        all_splits_identical = splitting["split_strategy"] == "n_equal_splits" or (splitting["split_strategy"] == "fixed_sizes" and not splitting["random_permute_splits"])
 
-        split_size_list = util.get_splits(ref_time_list, splitting)
-        split_start_indexes = [0] * len(split_size_list)
-        for i in range(1, len(split_start_indexes)):
-            split_start_indexes[i] = split_start_indexes[i-1] + split_size_list[i]
+        if all_splits_identical:
+            split_size_list = util.get_splits(ref_time_list, splitting)
+            split_start_indexes = [0] * len(split_size_list)
+            for i in range(1, len(split_start_indexes)):
+                split_start_indexes[i] = split_start_indexes[i-1] + split_size_list[i-1]
 
 
-        policy_indexes = self.get_param_indexes(times, split_size_list, ref_time_list)
-        policy_start_indexes = self.get_param_indexes(sample_func_kwargs["init_time"], split_size_list, ref_time_list)
-
+            policy_indexes = self.get_param_indexes(times, split_size_list, ref_time_list)
+            policy_start_indexes = self.get_param_indexes(sample_func_kwargs["init_time"], split_size_list, ref_time_list)
+        else:
+            split_size_list = np.zeros((times.shape[0], splitting["n_splits"]), dtype=int)
+            for i in range(len(split_size_list)):
+                split_size_list[i] = util.get_splits(ref_time_list, splitting)
+            split_starts = np.concatenate((np.zeros((split_size_list.shape[0], 1), dtype=int),
+                                           np.cumsum(split_size_list, axis=-1)[:, :splitting["n_splits"]-1]), axis=-1)
+            policy_indexes = self.get_param_indexes(times, split_size_list, ref_time_list, split_starts = split_starts)
+            policy_start_indexes = policy_indexes[:, :, 0]
         params = sample_func_kwargs.get("params")
         #
 
@@ -146,8 +160,13 @@ class TopErlPolicy(BlackBoxPolicy):
                 iteration_sample_func_kwargs["init_vel"] = torch.gather(splitting["segment_wise_init_vel"], index=segment_init_indexes.to(torch.int64), dim=-2)
 
             #next init time reference is always one step prior start of next split
-            init_idx = torch.tensor(split_start_indexes, device=self.device)[policy_start_indexes] - 1
-            iteration_sample_func_kwargs["init_time"] = ref_time_list[init_idx]
+            if all_splits_identical:
+                init_idx = torch.tensor(split_start_indexes, device=self.device)[policy_start_indexes]
+            else:
+                init_idx = torch.tensor(split_starts, device=self.device)[policy_start_indexes]
+
+            #not first timestep of sequence but one timestep of equal size before that
+            iteration_sample_func_kwargs["init_time"] = ref_time_list[init_idx] - (ref_time_list[1] - ref_time_list[0])
 
             if splitting.get("q_loss_strategy", "truncated") == "continuing":
                 counted_mask = torch.arange(smp_pos.size(-2), device=self.device)[None, None, :] * mask
@@ -334,7 +353,7 @@ class TopErlPolicy(BlackBoxPolicy):
         use_case = split_args.get("use_case", "sampler")
         if use_case == "agent":
             split_sample_func = self.sample_splitted_partial_times
-        elif split_args == {"split_strategy": "n_equal_splits", "n_splits": 1}:
+        elif split_args["split_strategy"] == "n_equal_splits" and  split_args["n_splits"]== 1:
             split_sample_func = self.sample_once
         else:
             split_sample_func = self.sample_splitted

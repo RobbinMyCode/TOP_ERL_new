@@ -105,15 +105,15 @@ params:
     n_splits: 3        #MOST IMPORTANT: defines how many policy splits will be allowed
                         #also required for split_strategy "n_equal_splits" (if n equal sized are impossible, ITS CURRENTLY NOT SUPPORTED)
     ranges: [50, 35, 10, 5] #required for fixed_sizes --> number of steps assigned for each policy, len(ranged) = n_splits (else error)
-    size_range: [50,70]  #required for split_strategy "random_size_range"
+    size_range: [15,35]  #required for split_strategy "random_size_range"
     mean_std: [10,5]    #required for split_strategy "random_gauss"
 
-    q_loss_strategy: "start_unchanged" #"truncated" #q-loss is updated via time-slices --> this determines how the time-sliced get cut for the update
+    q_loss_strategy: "continuing" #"truncated" #q-loss is updated via time-slices --> this determines how the time-sliced get cut for the update
                                  #"truncated" --> one slice only for one parameter segment -> cut off parts that are not created with the same policy parameters
                                  #"start_unchanged" --> each slice has a startpoint from sampling saved in the replay buffer, with this sampling method
                                                       # bigger gaps between two consecutive segments which use different parameters may occur, but the policies start with "known startpoints"
                                  #"continuing" --> take last reached point of previous policy as init point for next segment (parameters are set to fit a different point then)-> may also cause issues
-    v_func_estimation: "overconfident" #truncated, continuing or "overconfident"
+    v_func_estimation: "truncated" #truncated, continuing or "overconfident"
                                   #overconfident: policy which is responsible for init time predicts entire sequence for v-func estimation
   critic:
     type: TopErlCritic

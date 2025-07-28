@@ -34,7 +34,7 @@ class TopErlAgent(AbstractAgent):
 
         #For reference splitting
         self.reference_split_args = kwargs.get("reference_split",
-                                               {'split_strategy': 'fixed_max_size', 'split_size': 1e100})
+                                               {'split_strategy': 'n_equal_splits', 'n_splits': 1})
 
 
         # For off-policy learning
