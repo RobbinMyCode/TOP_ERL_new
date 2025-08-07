@@ -1,7 +1,7 @@
 ---
 name: "SLURM"
 partition: "accelerated"
-job-name: "box_random_seq_entire 4 random_splits"
+job-name: "box_random_seq_entire_4_random_splits"
 num_parallel_jobs: 120
 ntasks: 1
 cpus-per-task: 152
