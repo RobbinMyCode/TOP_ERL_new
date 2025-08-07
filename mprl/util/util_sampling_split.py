@@ -1,5 +1,5 @@
 import numpy as np
-
+from pandas.core.tools import times
 
 
 def get_splits(times, split_strategy: dict={"split_strategy": "n_equal_splits", "n_splits": 1}):
@@ -43,8 +43,32 @@ def get_splits(times, split_strategy: dict={"split_strategy": "n_equal_splits", 
         min_size, max_size = split_strategy["size_range"]
         total_size_covered = 0
         split_size_list = []
+
+        #allow first split to be smaller than min size
+        if split_strategy["size_exception_for_first_and_last_split"]:
+            # lower bound to ensure we dont have splits > max-size
+            lower_bound_for_validity = times.size(-1) - (
+                    split_strategy["n_splits"] - 1 - len(split_size_list)) * max_size
+            upper_bound_for_validity = times.size(-1) - (split_strategy["n_splits"] -1) * min_size + 1
+            next_split = np.random.randint(max(1,lower_bound_for_validity), min(max_size, upper_bound_for_validity))
+            split_size_list.append(next_split)
+            total_size_covered += next_split
+
+
         while total_size_covered < times.size(-1) and len(split_size_list) < int(split_strategy["n_splits"]) -1: #-1 because +1 element will be added in loop
-            next_split = np.random.randint(min_size, max_size)
+            if not split_strategy["size_exception_for_first_and_last_split"]:
+                # upper bound is so that remaining splits can support at least remaining_splits * min_split_size  #-1 for current value getting added
+                upper_bound_for_validity = times.size(-1) - (
+                            split_strategy["n_splits"] - 1 - len(split_size_list)) * min_size
+
+            else:
+                #upper bound so that remaining splits -1 are supported with at least min_split_size and the last one with at least 1  #-2 for current and last value
+                upper_bound_for_validity = times.size(-1) - (
+                        split_strategy["n_splits"] - 2 - len(split_size_list)) * min_size + 1
+            #lower bound to ensure we dont have splits > max-size
+            lower_bound_for_validity = times.size(-1) - (
+                    split_strategy["n_splits"] - 1 - len(split_size_list)) * max_size
+            next_split = np.random.randint(max(min_size,lower_bound_for_validity), min(max_size, upper_bound_for_validity))
             if total_size_covered + next_split < times.size(-1):
                 split_size_list.append(next_split)
                 total_size_covered += next_split

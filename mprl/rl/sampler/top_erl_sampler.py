@@ -476,7 +476,6 @@ class TopErlSampler(BlackBoxSampler):
         results["total_time_list"] = step_times.to("cpu").numpy()
 
 
-        #DONE (l331-333): episode_reward = sum of all step_rewards (100 steps)
         results["episode_reward"] = torch.cat(list_episode_reward, dim=0)
 
         results["episode_init_time"] = torch.cat(list_episode_init_time, dim=0)
