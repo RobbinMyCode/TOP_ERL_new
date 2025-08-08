@@ -106,7 +106,7 @@ params:
                         #also required for split_strategy "n_equal_splits" (if n equal sized are impossible, ITS CURRENTLY NOT SUPPORTED)
     ranges: [50, 35, 10, 5] #required for fixed_sizes --> number of steps assigned for each policy, len(ranged) = n_splits (else error)
     size_range: [10,40]  #required for split_strategy "random_size_range" -> random_size_range takes the splits from the sampler and so from the replay buffer
-                          # in the q and v update as splits, so that we dont introduce new gaps
+                          # in the q and v update as splits, so that we do not introduce new gaps
                           # will ensure that there are no splits < size_range[0] (except for first and last if next option==True)
     size_exception_for_first_and_last_split: True #only for size_range -> default true so that v + q func will be computed at all timesteps
     mean_std: [10,5]    #required for split_strategy "random_gauss"
