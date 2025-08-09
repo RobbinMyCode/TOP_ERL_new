@@ -63,12 +63,19 @@ def get_splits(times, split_strategy: dict={"split_strategy": "n_equal_splits", 
 
             else:
                 #upper bound so that remaining splits -1 are supported with at least min_split_size and the last one with at least 1  #-2 for current and last value
-                upper_bound_for_validity = times.size(-1) - (
-                        split_strategy["n_splits"] - 2 - len(split_size_list)) * min_size + 1
+                upper_bound_for_validity = (times.size(-1) -1) - (
+                        split_strategy["n_splits"] - 2 - len(split_size_list)) * min_size - total_size_covered #-2 because indexes are [0,99] not [1,100]
+
             #lower bound to ensure we dont have splits > max-size
-            lower_bound_for_validity = times.size(-1) - (
-                    split_strategy["n_splits"] - 1 - len(split_size_list)) * max_size
-            next_split = np.random.randint(max(min_size,lower_bound_for_validity), min(max_size, upper_bound_for_validity))
+            #lower_bound_for_validity = times.size(-1) - (
+            #        split_strategy["n_splits"] - 1 - len(split_size_list)) * max_size
+            lower_bound_for_validity = times.size(-1) - max_size  * (
+                    split_strategy["n_splits"] - 1 - len(split_size_list)) - total_size_covered
+            if max(min_size,lower_bound_for_validity) == min(max_size, upper_bound_for_validity):
+                next_split = min(max_size, upper_bound_for_validity)
+            else:
+                next_split = np.random.randint(max(min_size,lower_bound_for_validity), min(max_size, upper_bound_for_validity))
+
             if total_size_covered + next_split < times.size(-1):
                 split_size_list.append(next_split)
                 total_size_covered += next_split
@@ -83,6 +90,18 @@ def get_splits(times, split_strategy: dict={"split_strategy": "n_equal_splits", 
             split_size_list = split_size_list + [0] * (int(split_strategy["n_splits"]) - len(split_size_list))
         else: #-> did not reahc end in n_splits-1 steps --> put rest in nth bucket
             split_size_list.append(times.size(-1) - total_size_covered)
+    elif split_strategy["split_strategy"] == "fixed_size_rand_start":
+        #randint between 1 and fixed_size -1
+        split_size_list = [np.random.randint(0, split_strategy["fixed_size"])]
+        total_size_covered = split_size_list[0]
+
+        split_size_list = split_size_list + [split_strategy["fixed_size"]] * ((times.size(-1) -total_size_covered) // split_strategy["fixed_size"])
+        total_size_covered += split_strategy["fixed_size"] * ((times.size(-1) -total_size_covered) // split_strategy["fixed_size"])
+        if times.size(-1) != total_size_covered:
+            split_size_list.append(times.size(-1) - total_size_covered)
+
+
+
 
     elif split_strategy["split_strategy"] == "random_gauss":
         mean, std = split_strategy["mean_std"]

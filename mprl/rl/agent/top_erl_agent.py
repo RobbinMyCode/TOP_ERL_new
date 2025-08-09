@@ -274,7 +274,7 @@ class TopErlAgent(AbstractAgent):
         #TODONE: 1) i) get parameters of policy 2 given the correct initial conditions from traj_init at its corr timestep    ii) use those params to continue from the last pos
         #TODONE: [[ 2) use policy outside its range of knowledge ]] (perhaps)
         # -> truncation seems the best
-        if self.reference_split_args["split_strategy"] != "random_size_range":
+        if not "rand" in self.reference_split_args["split_strategy"]:
             num_segments = idx_in_segments.shape[0]
         else:
             num_segments = idx_in_segments.shape[1]
@@ -289,7 +289,7 @@ class TopErlAgent(AbstractAgent):
             params_mean_new, params_L_new, _ \
                 = self.make_new_pred(dataset, compute_trust_region_loss=False)
 
-        if self.reference_split_args["split_strategy"] != "random_size_range":
+        if not "rand" in self.reference_split_args["split_strategy"]:
             # [num_traj, num_weights] -> [num_traj, num_segments, num_weights]
             params_mean_new = util.add_expand_dim(params_mean_new, [1],
                                                   [num_segments])
@@ -338,7 +338,7 @@ class TopErlAgent(AbstractAgent):
 
 
         sampling_args_value_func = self.reference_split_args.copy()
-        if self.reference_split_args["split_strategy"] == "random_size_range":
+        if "rand" in self.reference_split_args["split_strategy"]:
             sampling_args_value_func["q_loss_strategy"] = "truncated"
             use_case = "aa"
         else:
@@ -401,7 +401,7 @@ class TopErlAgent(AbstractAgent):
 
         future_q = torch.minimum(future_q1, future_q2)
         '''
-        if self.reference_split_args["split_strategy"] == "random_size_range":
+        if "rand" in self.reference_split_args["split_strategy"]
             future_q_combined = torch.zeros(dataset["step_actions"].shape[:2], device=self.device)
             for j in range(actions.shape[1]):
                 start = dataset["split_start_indexes"][:, j]
@@ -415,7 +415,7 @@ class TopErlAgent(AbstractAgent):
             future_q = future_q_combined
         '''
         # Find the idx where the action is the last action in the valid trajectory
-        if self.reference_split_args["split_strategy"] != "random_size_range":
+        if not "rand" in self.reference_split_args["split_strategy"]:
             # Use last q as the target of the V-func
             # [num_traj, num_segments, 1 + num_seg_actions]
             # -> [num_traj, num_segments]
@@ -427,7 +427,7 @@ class TopErlAgent(AbstractAgent):
                 future_q[:, -1, last_valid_q_idx].squeeze(-1))
         else:
             next_seg_start_idx = seg_start_idx[..., 1:]
-            last_valid_q_idx_split = next_seg_start_idx[..., None] == idx_in_segments[:, :2, :]
+            last_valid_q_idx_split = next_seg_start_idx[..., None] == idx_in_segments[:, :-1, :]
 
             last_valid_q_idx_max_len = (idx_in_segments[:, -1] == traj_length)[:, None, :]
             last_valid_mask = torch.cat([last_valid_q_idx_split, last_valid_q_idx_max_len], dim=1)
@@ -470,7 +470,7 @@ class TopErlAgent(AbstractAgent):
             = torch.nn.functional.pad(future_v, (0, num_seg_actions))
 
 
-        if self.reference_split_args["split_strategy"] != "random_size_range":
+        if not "rand" in self.reference_split_args["split_strategy"]:
             # [num_segments, num_seg_actions]
             v_idx = idx_in_segments[:, 1:]
             # assert v_idx.max() <= traj_length
@@ -514,7 +514,7 @@ class TopErlAgent(AbstractAgent):
                                                     [1], [num_segments])
 
         # -> [num_traj, num_segments, 1 + num_seg_actions]
-        if self.reference_split_args["split_strategy"] != "random_size_range":
+        if not "rand" in self.reference_split_args["split_strategy"]:
             seg_reward_idx = util.add_expand_dim(idx_in_segments, [0],
                                              [num_traj])
         else:
@@ -575,7 +575,7 @@ class TopErlAgent(AbstractAgent):
             #    seg_actions_idx = idx_in_segments[..., :-1]
             #    num_seg_actions = seg_actions_idx.shape[-1]
 
-            if self.reference_split_args["split_strategy"] != "random_size_range":
+            if not "rand" in self.reference_split_args["split_strategy"]:
                 idx_in_segments = self.get_random_segments()
                 seg_start_idx = idx_in_segments[..., 0]
                 assert seg_start_idx[-1] < self.traj_length
@@ -585,8 +585,11 @@ class TopErlAgent(AbstractAgent):
                 used_split_args = self.reference_split_args
             else:
                 seg_start_idx = dataset["split_start_indexes"]
+                if self.reference_split_args["split_strategy"] == "random_size_range":
+                    max_diff = self.reference_split_args["size_range"][1]
+                elif self.reference_split_args["split_strategy"] == "fixed_size_rand_start":
+                    max_diff = self.reference_split_args["fixed_size"]
 
-                max_diff = self.reference_split_args["size_range"][1]
                 idx_in_segments = seg_start_idx[..., None] + torch.arange(max_diff, device=self.device)
                 seg_actions_idx = idx_in_segments[..., :-1]
                 num_seg_actions = seg_actions_idx.shape[-1]
@@ -631,11 +634,11 @@ class TopErlAgent(AbstractAgent):
 
                     # Mask out the padded actions
                     # [num_traj, num_segments, num_seg_actions]
-                    if self.reference_split_args["split_strategy"] != "random_size_range":
+                    if not "rand" in self.reference_split_args["split_strategy"]:
                         valid_mask = seg_actions_idx < self.traj_length
                     else: #also mask out actions that belong to the next segment
                         next_seg_start_idx = seg_start_idx[..., 1:]
-                        valid_q_idx_split = idx_in_segments[:, :2, :] < next_seg_start_idx[..., None]
+                        valid_q_idx_split = idx_in_segments[:, :-1, :] < next_seg_start_idx[..., None]
                         valid_q_idx_split_full = torch.cat([valid_q_idx_split, torch.ones((*(valid_q_idx_split.shape[:-2]), 1, valid_q_idx_split.shape[-1]), dtype=torch.bool, device=self.device)], dim=-2)
 
                         valid_q_idx_max_len = seg_actions_idx < self.traj_length
@@ -750,7 +753,11 @@ class TopErlAgent(AbstractAgent):
         else:
             num_segments = dataset["split_start_indexes"].size(1)
             seg_start_idx = dataset["split_start_indexes"]
-            max_diff = self.reference_split_args["size_range"][1]
+            if self.reference_split_args["split_strategy"] == "random_size_range":
+                max_diff = self.reference_split_args["size_range"][1]
+            elif self.reference_split_args["split_strategy"] == "fixed_size_rand_start":
+                max_diff = self.reference_split_args["fixed_size"]
+
             idx_in_segments = seg_start_idx[..., None] + torch.arange(max_diff, device=self.device)
             seg_actions_idx = idx_in_segments[..., :-1]
 
@@ -784,7 +791,7 @@ class TopErlAgent(AbstractAgent):
 
         # Current state
         # [num_traj, num_segments, dim_state]
-        if self.reference_split_args["split_strategy"] != "random_size_range":
+        if not "rand" in self.reference_split_args["split_strategy"]:
             c_state = states[:, seg_start_idx]
             # [num_segments] -> [num_traj, num_segments]
             seg_start_idx = util.add_expand_dim(seg_start_idx, [0],
@@ -810,7 +817,7 @@ class TopErlAgent(AbstractAgent):
             q2 = q1
 
         #mask out values from "invalid" actions from q -> set to 0 (only required for the "oversampling" in random_size_range)
-        if self.reference_split_args["split_strategy"] == "random_size_range":
+        if "rand" in self.reference_split_args["split_strategy"]:
             seg_end_idx = torch.cat([seg_start_idx[:, 1:],
                                      states.size(1) * torch.ones((seg_start_idx.size(0), 1), dtype=torch.int,
                                                                  device=self.device)], axis=-1)
