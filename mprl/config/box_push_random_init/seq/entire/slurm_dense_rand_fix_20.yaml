@@ -1,7 +1,7 @@
 ---
 name: "SLURM"
 partition: "accelerated"
-job-name: "box_random_seq_entire_rand_fixed_20"
+job-name: "box_random_seq_entire_rand_fixed"
 num_parallel_jobs: 120
 ntasks: 1
 cpus-per-task: 152
@@ -37,5 +37,10 @@ params:
   projection:
     args:
       total_train_steps: *iterations
+
+list:
+  reference_split:
+    n_splits: [6, 8, 11, 5]
+    fixed_size: [20, 15, 10, 25]
 
 
