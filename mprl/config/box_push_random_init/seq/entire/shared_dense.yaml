@@ -102,7 +102,7 @@ params:
     split_strategy: "fixed_size_rand_start" #n_equal_splits, random_size_range, random_gauss, fixed_sizes, fixed_size_rand_start
     random_permute_splits: False #e.g. ranges = [12,15,36,0] -> permute that list every iteration before assignment, usable for ALL split_strategies
 
-    n_splits: 6        #MOST IMPORTANT: defines how many policy splits will be allowed
+    n_splits: 8        #MOST IMPORTANT: defines how many policy splits will be allowed
                         #also required for split_strategy "n_equal_splits" (if n equal sized are impossible, ITS CURRENTLY NOT SUPPORTED)
     ranges: [50, 35, 10, 5] #required for fixed_sizes --> number of steps assigned for each policy, len(ranged) = n_splits (else error)
     size_range: [15,30]  #required for split_strategy "random_size_range" -> random_size_range takes the splits from the sampler and so from the replay buffer

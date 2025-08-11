@@ -427,7 +427,8 @@ class TopErlAgent(AbstractAgent):
                 future_q[:, -1, last_valid_q_idx].squeeze(-1))
         else:
             next_seg_start_idx = seg_start_idx[..., 1:]
-            last_valid_q_idx_split = next_seg_start_idx[..., None] == idx_in_segments[:, :-1, :]
+            #segment goes from [0, next_start) -> start_idx of next is end+1
+            last_valid_q_idx_split = next_seg_start_idx[..., None] == idx_in_segments[:, :-1, :] +1
 
             last_valid_q_idx_max_len = (idx_in_segments[:, -1] == traj_length)[:, None, :]
             last_valid_mask = torch.cat([last_valid_q_idx_split, last_valid_q_idx_max_len], dim=1)
@@ -487,11 +488,8 @@ class TopErlAgent(AbstractAgent):
                 for b in range(future_returns.shape[0]):
                     s = start[b]
                     e = end[b]
-                    if e-s!=0: #edgecase both=0 -> [..., 1:0] = [..., 0:-1] cant be
-                        try:
-                            future_returns[b, j, 1:e - s] = future_v_pad_zero_end[b, s:e-1]
-                        except:
-                            pass
+                    if e-s!=0: #edgecase e.g. both=0 -> [..., 1:0] = [..., 0:-1] would be incorrect
+                        future_returns[b, j, 1:e - s] = future_v_pad_zero_end[b, s:e-1]
 
 
         ########################################################################
