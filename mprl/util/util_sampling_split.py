@@ -99,6 +99,8 @@ def get_splits(times, split_strategy: dict={"split_strategy": "n_equal_splits", 
         total_size_covered += split_strategy["fixed_size"] * ((times.size(-1) -total_size_covered) // split_strategy["fixed_size"])
         if times.size(-1) != total_size_covered:
             split_size_list.append(times.size(-1) - total_size_covered)
+        if len(split_size_list) < split_strategy["n_splits"]:
+            split_size_list = split_size_list + [0] * (split_strategy["n_splits"] - len(split_size_list))
 
 
 

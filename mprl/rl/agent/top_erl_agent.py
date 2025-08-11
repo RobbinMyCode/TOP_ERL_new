@@ -487,7 +487,11 @@ class TopErlAgent(AbstractAgent):
                 for b in range(future_returns.shape[0]):
                     s = start[b]
                     e = end[b]
-                    future_returns[b, j, 1:e - s] = future_v_pad_zero_end[b, s:e-1]
+                    if e-s!=0: #edgecase both=0 -> [..., 1:0] = [..., 0:-1] cant be
+                        try:
+                            future_returns[b, j, 1:e - s] = future_v_pad_zero_end[b, s:e-1]
+                        except:
+                            pass
 
 
         ########################################################################
@@ -739,7 +743,7 @@ class TopErlAgent(AbstractAgent):
                                        self.traj_has_downsample)
 
         # Shape of idx_in_segments [num_segments, num_seg_actions + 1]
-        if self.reference_split_args["split_strategy"] != "random_size_range" :
+        if not "rand" in self.reference_split_args["split_strategy"]:
             idx_in_segments = self.get_random_segments()
             num_segments = idx_in_segments.shape[0]
             seg_start_idx = idx_in_segments[..., 0]
