@@ -99,16 +99,22 @@ params:
         #as_zero: every split will start at time index 0 --> each split starts at the current starting position [all steps after total step size get cut out]
           #-> goal parameter loses direct meaning as goal is not reachable in the used step size but would need last interval start+total_steps
 
-    split_strategy: "fixed_size_rand_start" #n_equal_splits, random_size_range, random_gauss, fixed_sizes, fixed_size_rand_start
+    split_strategy: "fixed_size_rand_start" #n_equal_splits, random_size_range, random_gauss, fixed_sizes, fixed_size_rand_start, rand_semi_fixed_size_focus_on_region
     random_permute_splits: False #e.g. ranges = [12,15,36,0] -> permute that list every iteration before assignment, usable for ALL split_strategies
 
-    n_splits: 8        #MOST IMPORTANT: defines how many policy splits will be allowed
+    n_splits: 6        #MOST IMPORTANT: defines how many policy splits will be allowed
                         #also required for split_strategy "n_equal_splits" (if n equal sized are impossible, ITS CURRENTLY NOT SUPPORTED)
     ranges: [50, 35, 10, 5] #required for fixed_sizes --> number of steps assigned for each policy, len(ranged) = n_splits (else error)
     size_range: [15,30]  #required for split_strategy "random_size_range" -> random_size_range takes the splits from the sampler and so from the replay buffer
                           # in the q and v update as splits, so that we dont introduce new gaps
                           # will ensure that there are no splits < size_range[0] (except for first and last if next option==True)
     fixed_size: 20      #size for intermediate splits for fixed_size_rand_start
+    focus_regions: [30, 80] #required for rand_semi_fixed_size_focus_on_region:  each value gives a separate region
+                            #[focus_region[i]-focus_regions_size_1way, focus_region[i]+focus_regions_size_1way],
+                            #around where the sampling size is decreased
+                            #-- uniformly sampled in [min_decreased_size, fixed_size] (include_last=True)
+    focus_regions_size_1way: 15 #required for rand_semi_fixed_size_focus_on_region: (half-)size of focus region
+    min_decreased_size: 10  #required for: rand_semi_fixed_size_focus_on_region:    min sampling distance in focus region
     size_exception_for_first_and_last_split: True #only for size_range -> default true so that v + q func will be computed at all timesteps
     mean_std: [10,5]    #required for split_strategy "random_gauss"
 

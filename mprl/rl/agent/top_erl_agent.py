@@ -479,20 +479,57 @@ class TopErlAgent(AbstractAgent):
             # [num_traj, traj_length] -> [num_traj, num_segments, num_seg_actions]
             future_returns[..., 1:] = future_v_pad_zero_end[:, v_idx]
         else:
-            #assign future_v in correct positions of future_returns [num_traj, total_steps] -> [num_traj, actual_num_segments, max_poss_len_segments]
-            for j in range(future_returns.shape[1]):
-                start = dataset["split_start_indexes"][:, j]
-                end = dataset["split_start_indexes"][:, j + 1] if j != actions.shape[1] - 1 else \
-                future_v.shape[-1] * torch.ones_like(start)
+            '''
+            def resample_n_step():
+                #do for rewards and returns
+                rewards_reshaped = torch.zeros_like(future_returns)
+                #assign future_v in correct positions of future_returns [num_traj, total_steps] -> [num_traj, actual_num_segments, max_poss_len_segments]
+                for j in range(future_returns.shape[1]):
+                    start = dataset["split_start_indexes"][:, j]
+                    end = dataset["split_start_indexes"][:, j + 1] if j != actions.shape[1] - 1 else \
+                    future_v.shape[-1] * torch.ones_like(start)
 
-                for b in range(future_returns.shape[0]):
-                    s = start[b]
-                    e = end[b]
-                    if e-s!=0: #edgecase e.g. both=0 -> [..., 1:0] = [..., 0:-1] would be incorrect
-                        future_returns[b, j, 1:e - s] = future_v_pad_zero_end[b, s:e-1]
+                    for b in range(future_returns.shape[0]):
+                        s = start[b]
+                        e = end[b]
+                        if e-s!=0: #edgecase e.g. both=0 -> [..., 1:0] = [..., 0:-1] would be incorrect
+                            future_returns[b, j, 1:e - s] = future_v_pad_zero_end[b, s:e-1]
+                            rewards_reshaped[b, j, :e - s] = rewards[b, s:e]
+                return future_returns, rewards_reshaped
 
+            future_returns1, rewards_reshaped1 = resample_n_step()
+            '''
+            start = dataset["split_start_indexes"]
 
-        ########################################################################
+            last_idx_append = future_v.shape[-1]* torch.ones((*start.shape[:-1], 1), dtype=torch.int, device=self.device)
+            end = torch.cat((dataset["split_start_indexes"][:, 1:], last_idx_append), dim=-1)
+
+            length = end - start
+
+            #create a mask for indexes where values shall be applied
+            pos = torch.arange(future_returns.shape[-1], device=self.device)[None, None, :]
+            mask = pos < length.unsqueeze(-1)
+
+            #reward sorted by splits
+            indices = torch.clamp(idx_in_segments, min=0, max=future_v.shape[-1]-1)
+
+            rewards_reshaped = torch.where(
+                mask,
+                torch.gather(rewards[:, None, :].expand(-1, dataset["split_start_indexes"].shape[1], -1), 2, indices),
+                torch.zeros_like(indices, dtype=rewards.dtype)
+            )
+
+            #returns sorted by splits
+            indices_v = torch.clamp(indices - 1, min=0)
+            g_v = torch.gather(
+                future_v_pad_zero_end.unsqueeze(1).expand(-1, dataset["split_start_indexes"].shape[1], -1),  # [B,J,T_v]
+                2,
+                indices_v
+            )
+            write_mask = (pos > 0) & mask
+            future_returns[write_mask] = g_v.to(torch.float)[write_mask]
+
+            ########################################################################
         ######### Compute rewards in the future, i.e. Eq(8) RHS 1st term #######
         ########################################################################
 
@@ -507,26 +544,31 @@ class TopErlAgent(AbstractAgent):
         # [num_traj, num_segments, 1 + num_seg_actions]
         discount_return = future_returns * discount_seq[:, None, :]
 
-        # [num_traj, traj_length] -> [num_traj, traj_length + num_seg_actions]
-        future_r_pad_zero_end \
-            = torch.nn.functional.pad(rewards, (0, num_seg_actions))
 
-        # -> [num_traj, num_segments, traj_length + num_seg_actions]
-        future_r_pad_zero_end = util.add_expand_dim(future_r_pad_zero_end,
-                                                    [1], [num_segments])
 
         # -> [num_traj, num_segments, 1 + num_seg_actions]
         if not "rand" in self.reference_split_args["split_strategy"]:
+            # [num_traj, traj_length] -> [num_traj, traj_length + num_seg_actions]
+            future_r_pad_zero_end \
+                = torch.nn.functional.pad(rewards, (0, num_seg_actions))
+
+            # -> [num_traj, num_segments, traj_length + num_seg_actions]
+            future_r_pad_zero_end = util.add_expand_dim(future_r_pad_zero_end,
+                                                        [1], [num_segments])
             seg_reward_idx = util.add_expand_dim(idx_in_segments, [0],
                                              [num_traj])
+
+            # torch.gather shapes
+            # input: [num_traj, num_segments, traj_length + num_seg_actions]
+            # index: [num_traj, num_segments, 1 + num_seg_actions]
+            # result: [num_traj, num_segments, 1 + num_seg_actions]
+            seg_r = torch.gather(input=future_r_pad_zero_end, dim=-1,
+                                 index=seg_reward_idx)
+
         else:
-            seg_reward_idx = idx_in_segments
-        # torch.gather shapes
-        # input: [num_traj, num_segments, traj_length + num_seg_actions]
-        # index: [num_traj, num_segments, 1 + num_seg_actions]
-        # result: [num_traj, num_segments, 1 + num_seg_actions]
-        seg_r = torch.gather(input=future_r_pad_zero_end, dim=-1,
-                             index=seg_reward_idx)
+            #valid in splits -> use reshaped one
+            seg_r = rewards_reshaped
+
 
         seg_discount_r = seg_r * discount_seq[:, None, :]
 
@@ -553,6 +595,22 @@ class TopErlAgent(AbstractAgent):
 
         # [num_traj, num_segments, 1 + num_seg_actions]
         n_step_returns = (tril_discount_rewards.sum(dim=-1) + discount_return)
+
+        #filter out invalid commulativ returns (for steps not actually done in this split)
+        if "rand" in self.reference_split_args["split_strategy"]:
+            next_seg_start_idx = seg_start_idx[..., 1:]
+            valid_q_idx_split = idx_in_segments[:, :-1, :] < next_seg_start_idx[..., None]
+            # last split will never collide with the next split_start -> add True here
+            valid_q_idx_split_full = torch.cat([valid_q_idx_split, torch.ones(
+                (*(valid_q_idx_split.shape[:-2]), 1, valid_q_idx_split.shape[-1]), dtype=torch.bool,
+                device=self.device)], dim=-2)
+
+            valid_q_idx_max_len = idx_in_segments[..., :] < self.traj_length
+            # only take in actions, first of valid_q_idx_split is the start state of each segment -> and statement with absolute length
+            valid_mask = valid_q_idx_split_full * valid_q_idx_max_len
+
+            n_step_returns = n_step_returns * valid_mask
+
         return n_step_returns
 
     def update_critic(self):
@@ -643,7 +701,8 @@ class TopErlAgent(AbstractAgent):
                         valid_q_idx_split = idx_in_segments[:, :-1, :] < next_seg_start_idx[..., None]
                         valid_q_idx_split_full = torch.cat([valid_q_idx_split, torch.ones((*(valid_q_idx_split.shape[:-2]), 1, valid_q_idx_split.shape[-1]), dtype=torch.bool, device=self.device)], dim=-2)
 
-                        valid_q_idx_max_len = seg_actions_idx < self.traj_length
+                        #we only count actions -> one step [=init pos] less
+                        valid_q_idx_max_len = seg_actions_idx < self.traj_length - 1
                         #only take in actions, first of valid_q_idx_split is the start state of each segment -> and statement with absolute length
                         valid_mask = valid_q_idx_split_full[..., 1:] * valid_q_idx_max_len
                     # [num_traj, num_segments, num_seg_actions]
@@ -820,10 +879,15 @@ class TopErlAgent(AbstractAgent):
 
         #mask out values from "invalid" actions from q -> set to 0 (only required for the "oversampling" in random_size_range)
         if "rand" in self.reference_split_args["split_strategy"]:
+            #last segment ends at index 99 as we cut out the init states, e.g. else 19 actions for splitlength 19 (=state+18 ations)
+            #problem: last start at 99 -> no action generated ==> exception to the rule
+            #not required for prior states as the last action leads to the initial state of the next segment -> still valid
+            #also all segment lengths != 0 should sample an action
             seg_end_idx = torch.cat([seg_start_idx[:, 1:],
-                                     states.size(1) * torch.ones((seg_start_idx.size(0), 1), dtype=torch.int,
+                                     (states.size(1)-1) * torch.ones((seg_start_idx.size(0) , 1), dtype=torch.int,
                                                                  device=self.device)], axis=-1)
             seg_len_idx = seg_end_idx - seg_start_idx
+            seg_len_idx[seg_start_idx == states.size(1)-1] = 1
             index_list = torch.arange(q2.size(-1), device=self.device)
             mask = index_list[None, None, :] < seg_len_idx[:, :, None]
             q2 = q2 * mask

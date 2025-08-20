@@ -91,16 +91,69 @@ def get_splits(times, split_strategy: dict={"split_strategy": "n_equal_splits", 
         else: #-> did not reahc end in n_splits-1 steps --> put rest in nth bucket
             split_size_list.append(times.size(-1) - total_size_covered)
     elif split_strategy["split_strategy"] == "fixed_size_rand_start":
-        #randint between 1 and fixed_size -1
-        split_size_list = [np.random.randint(0, split_strategy["fixed_size"])]
+        #randint between 1 and fixed_size [upper limit not include in randint; low <= x < high]
+        split_size_list = [np.random.randint(1, split_strategy["fixed_size"]+1)]
         total_size_covered = split_size_list[0]
 
         split_size_list = split_size_list + [split_strategy["fixed_size"]] * ((times.size(-1) -total_size_covered) // split_strategy["fixed_size"])
-        total_size_covered += split_strategy["fixed_size"] * ((times.size(-1) -total_size_covered) // split_strategy["fixed_size"])
+        total_size_covered = total_size_covered + split_strategy["fixed_size"] * ((times.size(-1) -total_size_covered) // split_strategy["fixed_size"])
         if times.size(-1) != total_size_covered:
             split_size_list.append(times.size(-1) - total_size_covered)
         if len(split_size_list) < split_strategy["n_splits"]:
             split_size_list = split_size_list + [0] * (split_strategy["n_splits"] - len(split_size_list))
+        '''
+            focus_regions: [30, 80] #each value gives a seperate region 
+                                #[focus_region[i]-focus_regions_size_1way, focus_region[i]+focus_regions_size_1way], 
+                                #around where the sampling size is decreased 
+                                #-- uniformly sampled in [min_decreased_size, fixed_size] (include_last=True) 
+        focus_regions_size_1way: 20 #(half-)size of focus region
+        min_decreased_size: 10  #min sampling distance in focus region
+        '''
+    elif split_strategy["split_strategy"] == "rand_semi_fixed_size_focus_on_region":
+        focus_regions_start = np.array(split_strategy["focus_regions"]) - split_strategy["focus_regions_size_1way"]
+        focus_regions_end = np.array(split_strategy["focus_regions"]) + split_strategy["focus_regions_size_1way"]
+        fr_min = split_strategy["min_decreased_size"]
+
+        split_size_list = [np.random.randint(0, split_strategy["fixed_size"])]
+        total_size_covered = split_size_list[0]
+        fr_idx = 0
+        fr_reached = False
+        next_potential_pos = total_size_covered + split_strategy["fixed_size"]
+        while total_size_covered < times.size(-1):
+            #make sure last segment is not too large [ignores focus_regions]
+            if times.size(-1) -total_size_covered < split_strategy["fixed_size"]:
+                split_size_list.append(times.size(-1) - total_size_covered)
+                total_size_covered = times.size(-1)
+            #ensure focus regions are sampled accordingly
+            elif next_potential_pos > focus_regions_start[fr_idx] and total_size_covered < focus_regions_end[fr_idx]:
+                fr_reached = True
+                next_split = np.random.randint(fr_min, split_strategy["fixed_size"])
+                split_size_list = split_size_list + [next_split]
+                total_size_covered += next_split
+            else:
+                if fr_reached:
+                    if fr_idx != len(focus_regions_start) - 1:
+                        fr_idx += 1
+                    fr_reached = False
+                #get one more iteration before adding a fixed_size in case the next focus_region is already reached
+                # --> "pass" and only in the next call we add the default size
+                else:
+                    jitter = 0 #int(np.random.normal(0, 2))
+                    if total_size_covered + jitter + split_strategy["fixed_size"] > times.size(-1):
+                        jitter = 0
+                    split_size_list = split_size_list + [split_strategy["fixed_size"]+ jitter]
+                    total_size_covered += split_strategy["fixed_size"] + jitter
+
+
+        if len(split_size_list) < split_strategy["n_splits"]:
+            split_size_list = split_size_list + [0] * (split_strategy["n_splits"] - len(split_size_list))
+
+        assert len(split_size_list) <= split_strategy["n_splits"], (f""
+                f"'n_splits'={split_strategy['n_splits']} is not sufficient for the given split_strategy "
+                f"'rand_semi_fixed_size_focus_on_region' with fixed_size={split_strategy['fixed_size']} and "
+                f"min_decreased_size={split_strategy['min_decreased_size']}. It requires {len(split_size_list)} or more splits.")
+
+
 
 
 
