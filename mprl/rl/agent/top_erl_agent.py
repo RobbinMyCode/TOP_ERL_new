@@ -269,11 +269,6 @@ class TopErlAgent(AbstractAgent):
         traj_init_pos = dataset["step_desired_pos"] #desired_pos = end_pos of old trajectory at index
         traj_init_vel = dataset["step_desired_vel"]
 
-        #TODONE: truncation not optimal, but cant just select incorrect start point for param 2
-        #TODONE 0) check truncation in V is the problem (check everything else)
-        #TODONE: 1) i) get parameters of policy 2 given the correct initial conditions from traj_init at its corr timestep    ii) use those params to continue from the last pos
-        #TODONE: [[ 2) use policy outside its range of knowledge ]] (perhaps)
-        # -> truncation seems the best
         if not "rand" in self.reference_split_args["split_strategy"]:
             num_segments = idx_in_segments.shape[0]
         else:
@@ -427,8 +422,8 @@ class TopErlAgent(AbstractAgent):
                 future_q[:, -1, last_valid_q_idx].squeeze(-1))
         else:
             next_seg_start_idx = seg_start_idx[..., 1:]
-            #segment goes from [0, next_start) -> start_idx of next is end+1
-            last_valid_q_idx_split = next_seg_start_idx[..., None] == idx_in_segments[:, :-1, :] +1
+            #segment goes from [0, next_start] -> start_idx of next is end of previous
+            last_valid_q_idx_split = next_seg_start_idx[..., None] == idx_in_segments[:, :-1, :]
 
             last_valid_q_idx_max_len = (idx_in_segments[:, -1] == traj_length)[:, None, :]
             last_valid_mask = torch.cat([last_valid_q_idx_split, last_valid_q_idx_max_len], dim=1)
@@ -480,10 +475,8 @@ class TopErlAgent(AbstractAgent):
             future_returns[..., 1:] = future_v_pad_zero_end[:, v_idx]
         else:
             '''
-            def resample_n_step():
-                #do for rewards and returns
+            Parallized version of the following loop
                 rewards_reshaped = torch.zeros_like(future_returns)
-                #assign future_v in correct positions of future_returns [num_traj, total_steps] -> [num_traj, actual_num_segments, max_poss_len_segments]
                 for j in range(future_returns.shape[1]):
                     start = dataset["split_start_indexes"][:, j]
                     end = dataset["split_start_indexes"][:, j + 1] if j != actions.shape[1] - 1 else \
@@ -496,8 +489,6 @@ class TopErlAgent(AbstractAgent):
                             future_returns[b, j, 1:e - s] = future_v_pad_zero_end[b, s:e-1]
                             rewards_reshaped[b, j, :e - s] = rewards[b, s:e]
                 return future_returns, rewards_reshaped
-
-            future_returns1, rewards_reshaped1 = resample_n_step()
             '''
             start = dataset["split_start_indexes"]
 
@@ -506,15 +497,17 @@ class TopErlAgent(AbstractAgent):
 
             length = end - start
 
-            #create a mask for indexes where values shall be applied
+            #create a mask for indexes where values shall be applied -> ensures only values in current split range are considered
             pos = torch.arange(future_returns.shape[-1], device=self.device)[None, None, :]
-            mask = pos < length.unsqueeze(-1)
 
-            #reward sorted by splits
+            #<= because state + actions -> 1+length*actions (last action (-> resulting pos) = init of next segment)
+            segment_length_mask = pos <= length.unsqueeze(-1)
+
+            #reward sorted by splits, idx clamped so that rewards can get assigned properly (and invalids get masked out by segment_length_mask)
             indices = torch.clamp(idx_in_segments, min=0, max=future_v.shape[-1]-1)
 
             rewards_reshaped = torch.where(
-                mask,
+                segment_length_mask,
                 torch.gather(rewards[:, None, :].expand(-1, dataset["split_start_indexes"].shape[1], -1), 2, indices),
                 torch.zeros_like(indices, dtype=rewards.dtype)
             )
@@ -526,10 +519,10 @@ class TopErlAgent(AbstractAgent):
                 2,
                 indices_v
             )
-            write_mask = (pos > 0) & mask
+            write_mask = (pos > 0) & segment_length_mask
             future_returns[write_mask] = g_v.to(torch.float)[write_mask]
 
-            ########################################################################
+        ########################################################################
         ######### Compute rewards in the future, i.e. Eq(8) RHS 1st term #######
         ########################################################################
 
@@ -577,7 +570,7 @@ class TopErlAgent(AbstractAgent):
         seg_discount_r = util.add_expand_dim(seg_discount_r, [-2],
                                              [1 + num_seg_actions])
 
-        # Get a lower triangular mask with off-diagonal elements as 1
+        # Get a lower triangular segment_length_mask with off-diagonal elements as 1
         # [num_seg_actions + 1, num_seg_actions + 1]
         reward_tril_mask = torch.tril(torch.ones(1 + num_seg_actions,
                                                  1 + num_seg_actions,
@@ -617,7 +610,11 @@ class TopErlAgent(AbstractAgent):
         self.critic.train()
         self.critic.requires_grad(True)
 
+        mc_returns_list = []
         critic_loss_list = []
+        targets_list = []
+        targets_bias_list = []
+
 
         for grad_idx in range(self.epochs_critic):
             # Sample from replay buffer
@@ -626,14 +623,6 @@ class TopErlAgent(AbstractAgent):
             actions = dataset["step_actions"]
             num_traj = states.shape[0]
             traj_length = states.shape[1]
-
-
-            #if not "random" in self.reference_split_args["split_strategy"]:
-            #    idx_in_segments = self.get_random_segments(pad_additional=True)
-            #    seg_start_idx = idx_in_segments[..., 0]
-            #    assert seg_start_idx[-1] < self.traj_length
-            #    seg_actions_idx = idx_in_segments[..., :-1]
-            #    num_seg_actions = seg_actions_idx.shape[-1]
 
             if not "rand" in self.reference_split_args["split_strategy"]:
                 idx_in_segments = self.get_random_segments()
@@ -649,8 +638,10 @@ class TopErlAgent(AbstractAgent):
                     max_diff = self.reference_split_args["size_range"][1]
                 elif self.reference_split_args["split_strategy"] == "fixed_size_rand_start":
                     max_diff = self.reference_split_args["fixed_size"]
+                else:
+                    raise NotImplementedError
 
-                idx_in_segments = seg_start_idx[..., None] + torch.arange(max_diff, device=self.device)
+                idx_in_segments = seg_start_idx[..., None] + torch.arange(max_diff+1, device=self.device)
                 seg_actions_idx = idx_in_segments[..., :-1]
                 num_seg_actions = seg_actions_idx.shape[-1]
 
@@ -683,6 +674,14 @@ class TopErlAgent(AbstractAgent):
 
             # [num_traj, num_segments, 1 + num_seg_actions]
             targets = self.segments_n_step_return_vf(dataset, idx_in_segments)
+
+            mc_returns_mean = util.compute_mc_return(
+                dataset["step_rewards"].mean(dim=0),
+                self.discount_factor).mean().item()
+            mc_returns_list.append(mc_returns_mean)
+            targets_mean = targets.mean().item()
+            targets_list.append(targets_mean)
+            targets_bias_list.append(targets_mean - mc_returns_mean)
 
             for net, target_net, opt, scaler in self.critic_nets_and_opt():
                 # Use mix precision for faster computation
@@ -731,7 +730,11 @@ class TopErlAgent(AbstractAgent):
         if self.log_now:
             # Get critic update statistics
             critic_info_dict = {
-                **util.generate_stats(critic_loss_list, "critic_loss")}
+                **util.generate_stats(critic_loss_list, "critic_loss"),
+                **util.generate_stats(mc_returns_list, "mc_returns"),
+                **util.generate_stats(targets_list, "targets"),
+                **util.generate_stats(targets_bias_list, "targets_bias")
+            }
         else:
             critic_info_dict = {}
         return critic_info_dict
@@ -819,7 +822,8 @@ class TopErlAgent(AbstractAgent):
             elif self.reference_split_args["split_strategy"] == "fixed_size_rand_start":
                 max_diff = self.reference_split_args["fixed_size"]
 
-            idx_in_segments = seg_start_idx[..., None] + torch.arange(max_diff, device=self.device)
+            #1 extra entry as it is [s_0, a_0, ...,a_{l-1}]
+            idx_in_segments = seg_start_idx[..., None] + torch.arange(max_diff +1, device=self.device)
             seg_actions_idx = idx_in_segments[..., :-1]
 
             #idx_in_segments goes to index > 100 -> clip so that "unused" values are all at last timestep
@@ -879,15 +883,14 @@ class TopErlAgent(AbstractAgent):
 
         #mask out values from "invalid" actions from q -> set to 0 (only required for the "oversampling" in random_size_range)
         if "rand" in self.reference_split_args["split_strategy"]:
-            #last segment ends at index 99 as we cut out the init states, e.g. else 19 actions for splitlength 19 (=state+18 ations)
+            #last segment ends at index 99 as we cut out the init states, e.g. else 19 actions for splitlength 20 (=state+19 actions)
             #problem: last start at 99 -> no action generated ==> exception to the rule
             #not required for prior states as the last action leads to the initial state of the next segment -> still valid
             #also all segment lengths != 0 should sample an action
             seg_end_idx = torch.cat([seg_start_idx[:, 1:],
-                                     (states.size(1)-1) * torch.ones((seg_start_idx.size(0) , 1), dtype=torch.int,
+                                     (states.size(1)) * torch.ones((seg_start_idx.size(0) , 1), dtype=torch.int,
                                                                  device=self.device)], axis=-1)
             seg_len_idx = seg_end_idx - seg_start_idx
-            seg_len_idx[seg_start_idx == states.size(1)-1] = 1
             index_list = torch.arange(q2.size(-1), device=self.device)
             mask = index_list[None, None, :] < seg_len_idx[:, :, None]
             q2 = q2 * mask
