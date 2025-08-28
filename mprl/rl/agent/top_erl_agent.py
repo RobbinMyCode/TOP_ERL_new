@@ -395,20 +395,7 @@ class TopErlAgent(AbstractAgent):
                 future_q2 = future_q1
 
         future_q = torch.minimum(future_q1, future_q2)
-        '''
-        if "rand" in self.reference_split_args["split_strategy"]
-            future_q_combined = torch.zeros(dataset["step_actions"].shape[:2], device=self.device)
-            for j in range(actions.shape[1]):
-                start = dataset["split_start_indexes"][:, j]
-                end = dataset["split_start_indexes"][:, j+1] if j != actions.shape[1] - 1 else future_q_combined.shape[1] * torch.ones_like(start)
 
-                for b in range(actions.shape[0]):
-                    s = start[b]
-                    e = end[b]
-                    future_q_combined[b, s:e] = future_q[b, j, :e-s]
-
-            future_q = future_q_combined
-        '''
         # Find the idx where the action is the last action in the valid trajectory
         if not "rand" in self.reference_split_args["split_strategy"]:
             # Use last q as the target of the V-func
@@ -592,7 +579,7 @@ class TopErlAgent(AbstractAgent):
         #filter out invalid commulativ returns (for steps not actually done in this split)
         if "rand" in self.reference_split_args["split_strategy"]:
             next_seg_start_idx = seg_start_idx[..., 1:]
-            valid_q_idx_split = idx_in_segments[:, :-1, :] < next_seg_start_idx[..., None]
+            valid_q_idx_split = idx_in_segments[:, :-1, :] <= next_seg_start_idx[..., None]
             # last split will never collide with the next split_start -> add True here
             valid_q_idx_split_full = torch.cat([valid_q_idx_split, torch.ones(
                 (*(valid_q_idx_split.shape[:-2]), 1, valid_q_idx_split.shape[-1]), dtype=torch.bool,
@@ -697,7 +684,7 @@ class TopErlAgent(AbstractAgent):
                         valid_mask = seg_actions_idx < self.traj_length
                     else: #also mask out actions that belong to the next segment
                         next_seg_start_idx = seg_start_idx[..., 1:]
-                        valid_q_idx_split = idx_in_segments[:, :-1, :] < next_seg_start_idx[..., None]
+                        valid_q_idx_split = idx_in_segments[:, :-1, :] <= next_seg_start_idx[..., None]
                         valid_q_idx_split_full = torch.cat([valid_q_idx_split, torch.ones((*(valid_q_idx_split.shape[:-2]), 1, valid_q_idx_split.shape[-1]), dtype=torch.bool, device=self.device)], dim=-2)
 
                         #we only count actions -> one step [=init pos] less
@@ -706,7 +693,7 @@ class TopErlAgent(AbstractAgent):
                         valid_mask = valid_q_idx_split_full[..., 1:] * valid_q_idx_max_len
                     # [num_traj, num_segments, num_seg_actions]
                     vq_pred[..., 1:] = vq_pred[..., 1:] * valid_mask
-                    targets[..., 1:] = targets[..., 1:] * valid_mask
+                    #targets[..., 1:] = targets[..., 1:] * valid_mask
 
                     # Loss
                     critic_loss = torch.nn.functional.mse_loss(vq_pred, targets)
