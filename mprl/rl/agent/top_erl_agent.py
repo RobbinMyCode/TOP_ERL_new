@@ -491,11 +491,13 @@ class TopErlAgent(AbstractAgent):
             segment_length_mask = pos <= length.unsqueeze(-1)
 
             #reward sorted by splits, idx clamped so that rewards can get assigned properly (and invalids get masked out by segment_length_mask)
-            indices = torch.clamp(idx_in_segments, min=0, max=future_v.shape[-1]-1)
+            indices = torch.clamp(idx_in_segments, min=0, max=future_v.shape[-1])
 
+            rewards_zero_pad \
+                = torch.nn.functional.pad(rewards, (0, 1))
             rewards_reshaped = torch.where(
                 segment_length_mask,
-                torch.gather(rewards[:, None, :].expand(-1, dataset["split_start_indexes"].shape[1], -1), 2, indices),
+                torch.gather(rewards_zero_pad[:, None, :].expand(-1, dataset["split_start_indexes"].shape[1], -1), 2, indices),
                 torch.zeros_like(indices, dtype=rewards.dtype)
             )
 
