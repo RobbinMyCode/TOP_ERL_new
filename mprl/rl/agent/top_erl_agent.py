@@ -415,7 +415,7 @@ class TopErlAgent(AbstractAgent):
             last_valid_q_idx_max_len = (idx_in_segments[:, -1] == traj_length)[:, None, :]
             last_valid_mask = torch.cat([last_valid_q_idx_split, last_valid_q_idx_max_len], dim=1)
 
-            #future_returns[:, :-1, 0] = future_q[:, :-1, -1]
+            #last_valid is a single index -> multiplication is basically getting the index
             future_returns[:, :, 0] = (
                 torch.sum(future_q * last_valid_mask, axis=-1)
             )
@@ -455,7 +455,7 @@ class TopErlAgent(AbstractAgent):
 
         if not "rand" in self.reference_split_args["split_strategy"]:
             # [num_segments, num_seg_actions]
-            v_idx = idx_in_segments[:, 1:]
+            v_idx = idx_in_segments[:, 1:] #segment wise indexes 0..end -> 1...end, 100 instead of 101 indexes
             # assert v_idx.max() <= traj_length
 
             # [num_traj, traj_length] -> [num_traj, num_segments, num_seg_actions]
@@ -499,8 +499,8 @@ class TopErlAgent(AbstractAgent):
                 torch.zeros_like(indices, dtype=rewards.dtype)
             )
 
-            #returns sorted by splits
-            indices_v = torch.clamp(indices - 1, min=0)
+            #returns sorted by splits, first dublicate index does not matter as we only use action pos > 0
+            indices_v = torch.clamp(idx_in_segments, min=0, max=future_v.shape[-1])
             g_v = torch.gather(
                 future_v_pad_zero_end.unsqueeze(1).expand(-1, dataset["split_start_indexes"].shape[1], -1),  # [B,J,T_v]
                 2,
