@@ -1,10 +1,10 @@
 ---
 name: "SLURM"
-partition: "dev_accelerated"
+partition: "accelerated"
 job-name: "box_random_seq_entire_rand_fixed"
-num_parallel_jobs: 2
+num_parallel_jobs: 1
 ntasks: 1
-cpus-per-task: 4
+cpus-per-task: 10
 time: 240 #600 for 10 hours
 gpus_per_rep: 1
 scheduler: horeka
@@ -21,8 +21,8 @@ import_exp: "box_random_seq_entire"
 
 # cw2 config
 repetitions: 1      # Number of repetitions, each with different random seed, 2 or 4 for test, 20 for paper
-reps_per_job: 2
-reps_in_parallel: 2
+reps_per_job: 1
+reps_in_parallel: 1
 iterations: &iterations 35000
 num_checkpoints: 1
 

@@ -300,7 +300,7 @@ class TopErlAgent(AbstractAgent):
         # [num_traj, traj_length] -> [num_traj, num_segments]
         #random_range case
         if times.shape[0] == seg_start_idx.shape[0]:
-            times = times[np.arange(512)[:, None],  seg_start_idx]
+            times = times[np.arange(times.shape[0])[:, None],  seg_start_idx]
         #all fixed sizes
         else:
             times = times[:, seg_start_idx]
@@ -365,8 +365,16 @@ class TopErlAgent(AbstractAgent):
         # [num_traj, num_segments, dim_state]
         if states.shape[0] == seg_start_idx.shape[0]:
             c_state = states[np.arange(states.shape[0])[:, None], seg_start_idx]
+            #TODO: check validity -> relative pos embeddings to initial point or absolute to trajectory point?
+            #absolut would be as follows
+            '''
             c_idx = seg_start_idx
             a_idx = idx_in_segments[..., :-1]
+            '''
+            #relativ
+            c_idx = torch.zeros_like(seg_start_idx)
+            a_idx = idx_in_segments[...,0, :-1][..., None, :] * torch.ones_like(idx_in_segments[..., :-1])
+
         else:
             c_state = states[:, seg_start_idx]
             # [num_traj, num_segments]
@@ -508,6 +516,7 @@ class TopErlAgent(AbstractAgent):
                 2,
                 indices_v
             )
+            g_v[idx_in_segments > future_v.shape[-1]-1] = 0.
             write_mask = (pos > 0) & segment_length_mask
             future_returns[write_mask] = g_v.to(torch.float)[write_mask]
 
@@ -569,6 +578,7 @@ class TopErlAgent(AbstractAgent):
         # [num_traj, num_segments, num_seg_actions + 1, num_seg_actions + 1]
         tril_discount_rewards = seg_discount_r * reward_tril_mask
 
+        mc_returns_resample = tril_discount_rewards.sum(dim=-1)
         # N-step return as target
         # V(s0) -> R0
         # Q(s0, a0) -> r0 + \gam * R1
@@ -592,14 +602,15 @@ class TopErlAgent(AbstractAgent):
             valid_mask = valid_q_idx_split_full * valid_q_idx_max_len
 
             n_step_returns = n_step_returns * valid_mask
-
-        return n_step_returns
+            mc_returns_resample = mc_returns_resample * valid_mask
+        return n_step_returns, mc_returns_resample
 
     def update_critic(self):
         self.critic.train()
         self.critic.requires_grad(True)
 
         mc_returns_list = []
+        mc_returns_resample_list = []
         critic_loss_list = []
         targets_list = []
         targets_bias_list = []
@@ -662,15 +673,21 @@ class TopErlAgent(AbstractAgent):
 
 
             # [num_traj, num_segments, 1 + num_seg_actions]
-            targets = self.segments_n_step_return_vf(dataset, idx_in_segments)
+            targets, mc_returns_resample = self.segments_n_step_return_vf(dataset, idx_in_segments)
 
             mc_returns_mean = util.compute_mc_return(
                 dataset["step_rewards"].mean(dim=0),
                 self.discount_factor).mean().item()
+
+            mc_returns_resample_list.append(mc_returns_resample.mean().item())
             mc_returns_list.append(mc_returns_mean)
             targets_mean = targets.mean().item()
             targets_list.append(targets_mean)
             targets_bias_list.append(targets_mean - mc_returns_mean)
+
+            #for relativ indexing: adapting idx_s, idx_a
+            seg_start_idx = seg_start_idx[..., 0][..., None] * torch.ones_like(seg_start_idx)
+            seg_actions_idx = seg_actions_idx[..., 0, :][..., None, :] * torch.ones_like(seg_actions_idx)
 
             for net, target_net, opt, scaler in self.critic_nets_and_opt():
                 # Use mix precision for faster computation
@@ -721,6 +738,7 @@ class TopErlAgent(AbstractAgent):
             critic_info_dict = {
                 **util.generate_stats(critic_loss_list, "critic_loss"),
                 **util.generate_stats(mc_returns_list, "mc_returns"),
+                **util.generate_stats(mc_returns_resample_list, "mc_returns_resample"),
                 **util.generate_stats(targets_list, "targets"),
                 **util.generate_stats(targets_bias_list, "targets_bias")
             }
@@ -816,7 +834,7 @@ class TopErlAgent(AbstractAgent):
             seg_actions_idx = idx_in_segments[..., :-1]
 
             #idx_in_segments goes to index > 100 -> clip so that "unused" values are all at last timestep
-            pred_at_times = times[torch.arange(512, device=self.device)[:, None, None], torch.clip(idx_in_segments[..., :-1], max=times.size(-1)-1)]
+            pred_at_times = times[torch.arange(states.shape[0], device=self.device)[:, None, None], torch.clip(idx_in_segments[..., :-1], max=times.size(-1)-1)]
             used_split_args = self.reference_split_args.copy()
             used_split_args["q_loss_strategy"] = "truncated"
             use_case = "just_parallel_sample_lul_this_string_does_not_matter_it_just_is_not_agent"
@@ -855,6 +873,9 @@ class TopErlAgent(AbstractAgent):
                                                   [num_traj])
         else:
             c_state = states[np.arange(states.shape[0])[:, None], seg_start_idx]
+            # for relativ indexing: adapting idx_s, idx_a
+            seg_start_idx = seg_start_idx[..., 0][..., None] * torch.ones_like(seg_start_idx)
+            seg_actions_idx = seg_actions_idx[..., 0, :][..., None, :] * torch.ones_like(seg_actions_idx)
 
         # [num_traj, num_segments, num_seg_actions]
         # vq -> q
