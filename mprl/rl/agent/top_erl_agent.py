@@ -55,6 +55,10 @@ class TopErlAgent(AbstractAgent):
         self.use_mix_precision = kwargs.get("use_mix_precision", False)
         self.critic_grad_scaler = [GradScaler(), GradScaler()]
 
+        self.extra_monitor_debug = {}
+        self.save_extra_monitor = False
+
+
     def get_optimizer(self, policy, critic):
         """
         Get the policy and critic network optimizers
@@ -385,7 +389,11 @@ class TopErlAgent(AbstractAgent):
                                         [0], [num_traj])
 
 
-
+        if self.save_extra_monitor:
+            if "target_q_c_state" in self.extra_monitor_debug:
+                self.extra_monitor_debug["target_q_c_state"] = torch.cat((self.extra_monitor_debug["target_q_c_state"], c_state), dim=0)
+            else:  ##
+                self.extra_monitor_debug["target_q_c_state"] = c_state
 
         # Use mix precision for faster computation
         with autocast_if(self.use_mix_precision):
@@ -438,6 +446,12 @@ class TopErlAgent(AbstractAgent):
 
         # [num_traj, traj_length, dim_state]
         c_state = states
+
+        if self.save_extra_monitor:
+            if "target_v_c_state" in self.extra_monitor_debug:
+                self.extra_monitor_debug["target_v_c_state"] = torch.cat((self.extra_monitor_debug["target_v_c_state"], c_state), dim=0)
+            else:  ##
+                self.extra_monitor_debug["target_v_c_state"] = c_state
 
         # Use mix precision for faster computation
         with autocast_if(self.use_mix_precision):
@@ -519,6 +533,12 @@ class TopErlAgent(AbstractAgent):
             g_v[idx_in_segments > future_v.shape[-1]-1] = 0.
             write_mask = (pos > 0) & segment_length_mask
             future_returns[write_mask] = g_v.to(torch.float)[write_mask]
+
+            if self.save_extra_monitor:
+                if "v_mask" in self.extra_monitor_debug:
+                    self.extra_monitor_debug["v_mask"] = torch.cat((self.extra_monitor_debug["v_mask"],write_mask ), dim=0)
+                else:##
+                    self.extra_monitor_debug["v_mask"] = write_mask
 
         ########################################################################
         ######### Compute rewards in the future, i.e. Eq(8) RHS 1st term #######
@@ -603,6 +623,12 @@ class TopErlAgent(AbstractAgent):
 
             n_step_returns = n_step_returns * valid_mask
             mc_returns_resample = mc_returns_resample * valid_mask
+
+            if self.save_extra_monitor:
+                if "target_mask" in self.extra_monitor_debug:
+                    self.extra_monitor_debug["target_mask"] = torch.cat((self.extra_monitor_debug["target_mask"],valid_mask ), dim=0)
+                else:##
+                    self.extra_monitor_debug["target_mask"] = valid_mask
         return n_step_returns, mc_returns_resample
 
     def update_critic(self):
@@ -614,6 +640,7 @@ class TopErlAgent(AbstractAgent):
         critic_loss_list = []
         targets_list = []
         targets_bias_list = []
+        targets_resample_bias_list = []
 
 
         for grad_idx in range(self.epochs_critic):
@@ -684,10 +711,18 @@ class TopErlAgent(AbstractAgent):
             targets_mean = targets.mean().item()
             targets_list.append(targets_mean)
             targets_bias_list.append(targets_mean - mc_returns_mean)
+            targets_resample_bias_list.append( (targets - mc_returns_resample).mean().item() )
 
             #for relativ indexing: adapting idx_s, idx_a
-            seg_start_idx = seg_start_idx[..., 0][..., None] * torch.ones_like(seg_start_idx)
-            seg_actions_idx = seg_actions_idx[..., 0, :][..., None, :] * torch.ones_like(seg_actions_idx)
+            seg_start_idx_pred = seg_start_idx[..., 0][..., None] * torch.ones_like(seg_start_idx)
+            seg_actions_idx_pred = seg_actions_idx[..., 0, :][..., None, :] * torch.ones_like(seg_actions_idx)
+
+            if self.save_extra_monitor:
+                if "vq_c_state" in self.extra_monitor_debug:
+                    self.extra_monitor_debug["vq_c_state"] = torch.cat(
+                        (self.extra_monitor_debug["vq_c_state"], c_state), dim=0)
+                else:  ##
+                    self.extra_monitor_debug["vq_c_state"] = c_state
 
             for net, target_net, opt, scaler in self.critic_nets_and_opt():
                 # Use mix precision for faster computation
@@ -695,7 +730,8 @@ class TopErlAgent(AbstractAgent):
                     # [num_traj, num_segments, 1 + num_seg_actions]
                     vq_pred = self.critic.critic(
                         net=net, state=c_state, actions=seg_actions,
-                        idx_s=seg_start_idx, idx_a=seg_actions_idx)
+                        idx_s=seg_start_idx_pred, idx_a=seg_actions_idx_pred)
+
 
                     # Mask out the padded actions
                     # [num_traj, num_segments, num_seg_actions]
@@ -712,14 +748,24 @@ class TopErlAgent(AbstractAgent):
                         valid_mask = valid_q_idx_split_full[..., 1:] * valid_q_idx_max_len
                     # [num_traj, num_segments, num_seg_actions]
                     vq_pred[..., 1:] = vq_pred[..., 1:] * valid_mask
-                    #targets[..., 1:] = targets[..., 1:] * valid_mask
+                    targets[..., 1:] = targets[..., 1:] * valid_mask
+
+                    if self.save_extra_monitor:
+                        if "total_mask" in self.extra_monitor_debug:
+                            self.extra_monitor_debug["total_mask"] = torch.cat(
+                                (self.extra_monitor_debug["total_mask"], valid_mask), dim=0)
+                        else:  ##
+                            self.extra_monitor_debug["total_mask"] = valid_mask
+
 
                     # Loss
                     critic_loss = torch.nn.functional.mse_loss(vq_pred, targets)
 
                 # Update critic net parameters
                 opt.zero_grad(set_to_none=True)
-
+                if self.save_extra_monitor:
+                    if len(self.extra_monitor_debug["total_mask"]) > 50000:
+                        pass
                 # critic_loss.backward()
                 scaler.scale(critic_loss).backward()
 
@@ -739,6 +785,7 @@ class TopErlAgent(AbstractAgent):
                 **util.generate_stats(critic_loss_list, "critic_loss"),
                 **util.generate_stats(mc_returns_list, "mc_returns"),
                 **util.generate_stats(mc_returns_resample_list, "mc_returns_resample"),
+                **util.generate_stats(targets_resample_bias_list, "target_bias_resample"),
                 **util.generate_stats(targets_list, "targets"),
                 **util.generate_stats(targets_bias_list, "targets_bias")
             }
@@ -873,6 +920,7 @@ class TopErlAgent(AbstractAgent):
                                                   [num_traj])
         else:
             c_state = states[np.arange(states.shape[0])[:, None], seg_start_idx]
+
             # for relativ indexing: adapting idx_s, idx_a
             seg_start_idx = seg_start_idx[..., 0][..., None] * torch.ones_like(seg_start_idx)
             seg_actions_idx = seg_actions_idx[..., 0, :][..., None, :] * torch.ones_like(seg_actions_idx)
