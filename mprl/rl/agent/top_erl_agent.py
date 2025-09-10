@@ -392,7 +392,7 @@ class TopErlAgent(AbstractAgent):
         if self.save_extra_monitor:
             if "target_q_c_state" in self.extra_monitor_debug:
                 self.extra_monitor_debug["target_q_c_state"] = torch.cat((self.extra_monitor_debug["target_q_c_state"], c_state), dim=0)
-            else:  ##
+            else:
                 self.extra_monitor_debug["target_q_c_state"] = c_state
 
         # Use mix precision for faster computation
@@ -617,7 +617,7 @@ class TopErlAgent(AbstractAgent):
                 (*(valid_q_idx_split.shape[:-2]), 1, valid_q_idx_split.shape[-1]), dtype=torch.bool,
                 device=self.device)], dim=-2)
 
-            valid_q_idx_max_len = idx_in_segments[..., :] < self.traj_length
+            valid_q_idx_max_len = idx_in_segments[..., :] <= self.traj_length
             # only take in actions, first of valid_q_idx_split is the start state of each segment -> and statement with absolute length
             valid_mask = valid_q_idx_split_full * valid_q_idx_max_len
 
@@ -743,7 +743,7 @@ class TopErlAgent(AbstractAgent):
                         valid_q_idx_split_full = torch.cat([valid_q_idx_split, torch.ones((*(valid_q_idx_split.shape[:-2]), 1, valid_q_idx_split.shape[-1]), dtype=torch.bool, device=self.device)], dim=-2)
 
                         #we only count actions -> one step [=init pos] less
-                        valid_q_idx_max_len = seg_actions_idx < self.traj_length - 1
+                        valid_q_idx_max_len = seg_actions_idx <= self.traj_length - 1
                         #only take in actions, first of valid_q_idx_split is the start state of each segment -> and statement with absolute length
                         valid_mask = valid_q_idx_split_full[..., 1:] * valid_q_idx_max_len
                     # [num_traj, num_segments, num_seg_actions]
@@ -922,20 +922,20 @@ class TopErlAgent(AbstractAgent):
             c_state = states[np.arange(states.shape[0])[:, None], seg_start_idx]
 
             # for relativ indexing: adapting idx_s, idx_a
-            seg_start_idx = seg_start_idx[..., 0][..., None] * torch.ones_like(seg_start_idx)
-            seg_actions_idx = seg_actions_idx[..., 0, :][..., None, :] * torch.ones_like(seg_actions_idx)
+            seg_start_idx_rel = seg_start_idx[..., 0][..., None] * torch.ones_like(seg_start_idx)
+            seg_actions_idx_rel = seg_actions_idx[..., 0, :][..., None, :] * torch.ones_like(seg_actions_idx)
 
         # [num_traj, num_segments, num_seg_actions]
         # vq -> q
         q1 = self.critic.critic(net=self.critic.net1, state=c_state,
                                 actions=pred_seg_actions,
-                                idx_s=seg_start_idx,
-                                idx_a=seg_actions_idx)[..., 1:]
+                                idx_s=seg_start_idx_rel,
+                                idx_a=seg_actions_idx_rel)[..., 1:]
         if not self.critic.single_q:
             q2 = self.critic.critic(net=self.critic.net2, state=c_state,
                                     actions=pred_seg_actions,
-                                    idx_s=seg_start_idx,
-                                    idx_a=seg_actions_idx)[..., 1:]
+                                    idx_s=seg_start_idx_rel,
+                                    idx_a=seg_actions_idx_rel)[..., 1:]
         else:
             q2 = q1
 
