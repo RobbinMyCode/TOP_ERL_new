@@ -515,14 +515,18 @@ class TopErlAgent(AbstractAgent):
             #reward sorted by splits, idx clamped so that rewards can get assigned properly (and invalids get masked out by segment_length_mask)
             indices = torch.clamp(idx_in_segments, min=0, max=future_v.shape[-1])
 
+
+
+            #one zero in front as first entry = initial state does not yield a reward, in the end to make the masking convenient
             rewards_zero_pad \
-                = torch.nn.functional.pad(rewards, (0, 1))
+                = torch.nn.functional.pad(rewards, (1, 1))
             rewards_reshaped = torch.where(
                 segment_length_mask,
                 torch.gather(rewards_zero_pad[:, None, :].expand(-1, dataset["split_start_indexes"].shape[1], -1), 2, indices),
                 torch.zeros_like(indices, dtype=rewards.dtype)
             )
-
+            #initial state of each action sequence does not yield a reward (only actions do)
+            rewards_reshaped[..., 0] = 0
             #returns sorted by splits, first dublicate index does not matter as we only use action pos > 0
             indices_v = torch.clamp(idx_in_segments, min=0, max=future_v.shape[-1])
             g_v = torch.gather(
@@ -532,6 +536,8 @@ class TopErlAgent(AbstractAgent):
             )
             g_v[idx_in_segments > future_v.shape[-1]-1] = 0.
             write_mask = (pos > 0) & segment_length_mask
+
+            #last action can not get a proper return as there is no state after ("index 100") to evaluate -> 0
             future_returns[write_mask] = g_v.to(torch.float)[write_mask]
 
             if self.save_extra_monitor:

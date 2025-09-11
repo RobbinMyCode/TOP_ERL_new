@@ -472,7 +472,7 @@ class TopErlSampler(BlackBoxSampler):
         results["step_dones"] = step_dones
         results["step_time_limit_dones"] = step_time_limit_dones
 
-        results["split_start_indexes"] = torch.tensor(list_split_indexes)[None, :]  ### these are start-indexes of the specific split (e.g. [0, 25, 50, 75]) for a splitsize of 25
+        results["split_start_indexes"] = torch.tensor(list_split_indexes)[None, :]  ### these are start-indexes of the specific split (e.g. [0, 25, 50, 75]) for a const splitsize of 25
         results["total_time_list"] = step_times.to("cpu").numpy()
 
 
