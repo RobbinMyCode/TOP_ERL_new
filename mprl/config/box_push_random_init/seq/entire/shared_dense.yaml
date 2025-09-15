@@ -28,8 +28,8 @@ params:
     type: TopErlAgentMultiProcessing
     # type: TopErlAgent
     args:
-      lr_policy: 3e-4
-      lr_critic: 5e-5
+      lr_policy: 3e-4   #grid with lr critic
+      lr_critic: 250e-5 #grid with lr policy
       wd_policy: 1e-5
       wd_critic: 1e-5
       use_mix_precision: true
@@ -37,15 +37,15 @@ params:
       schedule_lr_critic: false
       entropy_penalty_coef: 0.0
       discount_factor: 1
-      epochs_policy: 15 #10-50
-      epochs_critic: 30 #10-50
+      epochs_policy: 15 #10-50 --> increase
+      epochs_critic: 30 #10-50 --> fine like this
       balance_check: *log_interval
       evaluation_interval: *log_interval
-      use_old_policy: true  # use a target policy as the old policy for the trust region projection
+      use_old_policy: true  #can also be tried as false (but late) use a target policy as the old policy for the trust region projection
       old_policy_update_rate: 0.005  # update rate for the old policy from the current policy
       batch_size: 512
       critic_update_from: 1 # 300
-      policy_update_from: 1 # 2000
+      policy_update_from: 10000 # 2000
       dtype: *dtype
       device: *device
 
@@ -108,7 +108,7 @@ params:
     size_range: [15,30]  #required for split_strategy "random_size_range" -> random_size_range takes the splits from the sampler and so from the replay buffer
                           # in the q and v update as splits, so that we dont introduce new gaps
                           # will ensure that there are no splits < size_range[0] (except for first and last if next option==True)
-    fixed_size: 20      #size for intermediate splits for fixed_size_rand_start
+    fixed_size: 20 #tune from [5,10,20,30,35] 5-35      #size for intermediate splits for fixed_size_rand_start
     focus_regions: [30, 80] #required for rand_semi_fixed_size_focus_on_region:  each value gives a separate region
                             #[focus_region[i]-focus_regions_size_1way, focus_region[i]+focus_regions_size_1way],
                             #around where the sampling size is decreased
@@ -145,8 +145,8 @@ params:
     type: KLProjectionLayer  # KL-projection
     args:
       proj_type: kl
-      mean_bound: 0.05 #0.005 - 0.01
-      cov_bound: 0.0005 #0.00005 - 0.005
+      mean_bound: 0.05    #increase in case *=2-5
+      cov_bound: 0.0005   #increase in case *=2-5
       trust_region_coeff: 1.0
       scale_prec: true
       entropy_schedule: linear  # Desired value is linear or exp or None
@@ -170,6 +170,6 @@ params:
   replay_buffer:
     type: TopErlReplayBuffer
     args:
-      buffer_size: 5000
+      buffer_size: 5000 #2000-7000 later tries
       device: *device
       dtype: *dtype

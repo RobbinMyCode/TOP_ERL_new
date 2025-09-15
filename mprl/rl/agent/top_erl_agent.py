@@ -269,6 +269,7 @@ class TopErlAgent(AbstractAgent):
         states = dataset["step_states"]  # [num_traj, traj_length, dim_state]
         rewards = dataset["step_rewards"]
 
+
         # [num_traj, traj_length, dim_action]
         traj_init_pos = dataset["step_desired_pos"] #desired_pos = end_pos of old trajectory at index
         traj_init_vel = dataset["step_desired_vel"]
@@ -369,16 +370,8 @@ class TopErlAgent(AbstractAgent):
         # [num_traj, num_segments, dim_state]
         if states.shape[0] == seg_start_idx.shape[0]:
             c_state = states[np.arange(states.shape[0])[:, None], seg_start_idx]
-            #TODO: check validity -> relative pos embeddings to initial point or absolute to trajectory point?
-            #absolut would be as follows
-            '''
             c_idx = seg_start_idx
             a_idx = idx_in_segments[..., :-1]
-            '''
-            #relativ
-            c_idx = torch.zeros_like(seg_start_idx)
-            a_idx = idx_in_segments[...,0, :-1][..., None, :] * torch.ones_like(idx_in_segments[..., :-1])
-
         else:
             c_state = states[:, seg_start_idx]
             # [num_traj, num_segments]
@@ -435,6 +428,7 @@ class TopErlAgent(AbstractAgent):
             future_returns[:, :, 0] = (
                 torch.sum(future_q * last_valid_mask, axis=-1)
             )
+
         ########################################################################
         ######### Compute V-func in the future, i.e. Eq(8) RHS 2nd term ########
         ########################################################################
@@ -519,14 +513,14 @@ class TopErlAgent(AbstractAgent):
 
             #one zero in front as first entry = initial state does not yield a reward, in the end to make the masking convenient
             rewards_zero_pad \
-                = torch.nn.functional.pad(rewards, (1, 1))
+                = torch.nn.functional.pad(rewards, (0, 1))
             rewards_reshaped = torch.where(
                 segment_length_mask,
                 torch.gather(rewards_zero_pad[:, None, :].expand(-1, dataset["split_start_indexes"].shape[1], -1), 2, indices),
                 torch.zeros_like(indices, dtype=rewards.dtype)
             )
             #initial state of each action sequence does not yield a reward (only actions do)
-            rewards_reshaped[..., 0] = 0
+            #rewards_reshaped[..., 0] = 0
             #returns sorted by splits, first dublicate index does not matter as we only use action pos > 0
             indices_v = torch.clamp(idx_in_segments, min=0, max=future_v.shape[-1])
             g_v = torch.gather(
@@ -603,16 +597,22 @@ class TopErlAgent(AbstractAgent):
 
         # [num_traj, num_segments, num_seg_actions + 1, num_seg_actions + 1]
         tril_discount_rewards = seg_discount_r * reward_tril_mask
-
         mc_returns_resample = tril_discount_rewards.sum(dim=-1)
-        # N-step return as target
-        # V(s0) -> R0
-        # Q(s0, a0) -> r0 + \gam * R1
-        # Q(s0, a0, a1) -> r0 + \gam * r1 + \gam^2 * R2
-        # Q(s0, a0, a1, a2) -> r0 + \gam * r1 + \gam^2 * r2 + \gam^3 * R3
 
-        # [num_traj, num_segments, 1 + num_seg_actions]
-        n_step_returns = (tril_discount_rewards.sum(dim=-1) + discount_return)
+        if True: #not "rand" in self.reference_split_args["split_strategy"]:
+
+            # N-step return as target
+            # V(s0) -> R0
+            # Q(s0, a0) -> r0 + \gam * R1
+            # Q(s0, a0, a1) -> r0 + \gam * r1 + \gam^2 * R2
+            # Q(s0, a0, a1, a2) -> r0 + \gam * r1 + \gam^2 * r2 + \gam^3 * R3
+
+            # [num_traj, num_segments, 1 + num_seg_actions]
+            n_step_returns = (tril_discount_rewards.sum(dim=-1) + discount_return)
+
+        #for random --> multi segment we analogously define the initial value of a state/action with the commulative return UNTIL THE END of the episode
+        else:
+            pass
 
         #filter out invalid commulativ returns (for steps not actually done in this split)
         if "rand" in self.reference_split_args["split_strategy"]:
@@ -720,8 +720,8 @@ class TopErlAgent(AbstractAgent):
             targets_resample_bias_list.append( (targets - mc_returns_resample).mean().item() )
 
             #for relativ indexing: adapting idx_s, idx_a
-            seg_start_idx_pred = seg_start_idx[..., 0][..., None] * torch.ones_like(seg_start_idx)
-            seg_actions_idx_pred = seg_actions_idx[..., 0, :][..., None, :] * torch.ones_like(seg_actions_idx)
+            #seg_start_idx_pred = seg_start_idx[..., 0][..., None] * torch.ones_like(seg_start_idx)
+            #seg_actions_idx_pred = seg_actions_idx[..., 0, :][..., None, :] * torch.ones_like(seg_actions_idx)
 
             if self.save_extra_monitor:
                 if "vq_c_state" in self.extra_monitor_debug:
@@ -736,7 +736,7 @@ class TopErlAgent(AbstractAgent):
                     # [num_traj, num_segments, 1 + num_seg_actions]
                     vq_pred = self.critic.critic(
                         net=net, state=c_state, actions=seg_actions,
-                        idx_s=seg_start_idx_pred, idx_a=seg_actions_idx_pred)
+                        idx_s=seg_start_idx, idx_a=seg_actions_idx)
 
 
                     # Mask out the padded actions
@@ -766,7 +766,7 @@ class TopErlAgent(AbstractAgent):
 
                     # Loss
                     critic_loss = torch.nn.functional.mse_loss(vq_pred, targets)
-
+                    print(f"critic loss: {critic_loss} \t vq_pred: {vq_pred.mean().item()} \t targets: {targets.mean().item()} \t mc_return: {mc_returns_resample.mean().item()}")
                 # Update critic net parameters
                 opt.zero_grad(set_to_none=True)
                 if self.save_extra_monitor:
@@ -928,20 +928,20 @@ class TopErlAgent(AbstractAgent):
             c_state = states[np.arange(states.shape[0])[:, None], seg_start_idx]
 
             # for relativ indexing: adapting idx_s, idx_a
-            seg_start_idx_rel = seg_start_idx[..., 0][..., None] * torch.ones_like(seg_start_idx)
-            seg_actions_idx_rel = seg_actions_idx[..., 0, :][..., None, :] * torch.ones_like(seg_actions_idx)
+            #seg_start_idx_rel = seg_start_idx[..., 0][..., None] * torch.ones_like(seg_start_idx)
+            #seg_actions_idx_rel = seg_actions_idx[..., 0, :][..., None, :] * torch.ones_like(seg_actions_idx)
 
         # [num_traj, num_segments, num_seg_actions]
         # vq -> q
         q1 = self.critic.critic(net=self.critic.net1, state=c_state,
                                 actions=pred_seg_actions,
-                                idx_s=seg_start_idx_rel,
-                                idx_a=seg_actions_idx_rel)[..., 1:]
+                                idx_s=seg_start_idx,
+                                idx_a=seg_actions_idx)[..., 1:]
         if not self.critic.single_q:
             q2 = self.critic.critic(net=self.critic.net2, state=c_state,
                                     actions=pred_seg_actions,
-                                    idx_s=seg_start_idx_rel,
-                                    idx_a=seg_actions_idx_rel)[..., 1:]
+                                    idx_s=seg_start_idx,
+                                    idx_a=seg_actions_idx)[..., 1:]
         else:
             q2 = q1
 

@@ -7,6 +7,7 @@ ntasks: 1
 cpus-per-task: 10
 time: 240 #600 for 10 hours
 gpus_per_rep: 1
+sub_exp_name: &sub_exp_name "random fixed_length"
 scheduler: horeka
 sbatch_args:
   gres: "gpu:1"
@@ -25,6 +26,9 @@ reps_per_job: 1
 reps_in_parallel: 1
 iterations: &iterations 35000
 num_checkpoints: 1
+
+wandb:
+  group: *sub_exp_name
 
 # Hardware specific parameters
 params:
