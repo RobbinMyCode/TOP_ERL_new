@@ -17,6 +17,7 @@ from mprl.rl.replay_buffer import replay_buffer_factory
 import psutil
 import copy
 import time
+import numpy as np
 
 # NOTE: task in the sub process
 def sampler_task(cfg, cpu_cores, conn: multiprocessing.connection.Connection):
@@ -73,6 +74,10 @@ class MPExperimentMultiProcessing(experiment.AbstractIterativeExperiment):
         if cpu_cores is None:
             cpu_cores = set(range(psutil.cpu_count(logical=True)))
         # Set random seed globally
+
+        #TODO: THIS IS AN "DIRTY FIX", check why actually the seed auto does not work
+        if isinstance(cw_config["seed"], str):
+            cw_config["seed"] = np.random.randint(0, 2**32)
         util.set_global_random_seed(cw_config["seed"])
         self.verbose_level = cw_config.get("verbose_level", 1)
 
