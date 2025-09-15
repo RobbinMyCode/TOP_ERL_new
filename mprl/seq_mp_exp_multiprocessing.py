@@ -78,6 +78,7 @@ class MPExperimentMultiProcessing(experiment.AbstractIterativeExperiment):
         #TODO: THIS IS AN "DIRTY FIX", check why actually the seed auto does not work
         if isinstance(cw_config["seed"], str):
             cw_config["seed"] = np.random.randint(0, 2**32)
+            cfg["sampler"]["args"]["seed"] = cw_config["seed"]
         util.set_global_random_seed(cw_config["seed"])
         self.verbose_level = cw_config.get("verbose_level", 1)
 
