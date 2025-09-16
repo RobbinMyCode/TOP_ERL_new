@@ -55,9 +55,6 @@ class TopErlAgent(AbstractAgent):
         self.use_mix_precision = kwargs.get("use_mix_precision", False)
         self.critic_grad_scaler = [GradScaler(), GradScaler()]
 
-        self.extra_monitor_debug = {}
-        self.save_extra_monitor = False
-
 
     def get_optimizer(self, policy, critic):
         """
@@ -382,12 +379,6 @@ class TopErlAgent(AbstractAgent):
                                         [0], [num_traj])
 
 
-        if self.save_extra_monitor:
-            if "target_q_c_state" in self.extra_monitor_debug:
-                self.extra_monitor_debug["target_q_c_state"] = torch.cat((self.extra_monitor_debug["target_q_c_state"], c_state), dim=0)
-            else:
-                self.extra_monitor_debug["target_q_c_state"] = c_state
-
         # Use mix precision for faster computation
         with autocast_if(self.use_mix_precision):
             # [num_traj, num_segments, (num_smp,) 1 + num_seg_actions]
@@ -441,11 +432,6 @@ class TopErlAgent(AbstractAgent):
         # [num_traj, traj_length, dim_state]
         c_state = states
 
-        if self.save_extra_monitor:
-            if "target_v_c_state" in self.extra_monitor_debug:
-                self.extra_monitor_debug["target_v_c_state"] = torch.cat((self.extra_monitor_debug["target_v_c_state"], c_state), dim=0)
-            else:  ##
-                self.extra_monitor_debug["target_v_c_state"] = c_state
 
         # Use mix precision for faster computation
         with autocast_if(self.use_mix_precision):
@@ -534,12 +520,6 @@ class TopErlAgent(AbstractAgent):
             #last action can not get a proper return as there is no state after ("index 100") to evaluate -> 0
             future_returns[write_mask] = g_v.to(torch.float)[write_mask]
 
-            if self.save_extra_monitor:
-                if "v_mask" in self.extra_monitor_debug:
-                    self.extra_monitor_debug["v_mask"] = torch.cat((self.extra_monitor_debug["v_mask"],write_mask ), dim=0)
-                else:##
-                    self.extra_monitor_debug["v_mask"] = write_mask
-
         ########################################################################
         ######### Compute rewards in the future, i.e. Eq(8) RHS 1st term #######
         ########################################################################
@@ -599,20 +579,15 @@ class TopErlAgent(AbstractAgent):
         tril_discount_rewards = seg_discount_r * reward_tril_mask
         mc_returns_resample = tril_discount_rewards.sum(dim=-1)
 
-        if True: #not "rand" in self.reference_split_args["split_strategy"]:
+        # N-step return as target
+        # V(s0) -> R0
+        # Q(s0, a0) -> r0 + \gam * R1
+        # Q(s0, a0, a1) -> r0 + \gam * r1 + \gam^2 * R2
+        # Q(s0, a0, a1, a2) -> r0 + \gam * r1 + \gam^2 * r2 + \gam^3 * R3
 
-            # N-step return as target
-            # V(s0) -> R0
-            # Q(s0, a0) -> r0 + \gam * R1
-            # Q(s0, a0, a1) -> r0 + \gam * r1 + \gam^2 * R2
-            # Q(s0, a0, a1, a2) -> r0 + \gam * r1 + \gam^2 * r2 + \gam^3 * R3
+        # [num_traj, num_segments, 1 + num_seg_actions]
+        n_step_returns = (tril_discount_rewards.sum(dim=-1) + discount_return)
 
-            # [num_traj, num_segments, 1 + num_seg_actions]
-            n_step_returns = (tril_discount_rewards.sum(dim=-1) + discount_return)
-
-        #for random --> multi segment we analogously define the initial value of a state/action with the commulative return UNTIL THE END of the episode
-        else:
-            pass
 
         #filter out invalid commulativ returns (for steps not actually done in this split)
         if "rand" in self.reference_split_args["split_strategy"]:
@@ -630,11 +605,6 @@ class TopErlAgent(AbstractAgent):
             n_step_returns = n_step_returns * valid_mask
             mc_returns_resample = mc_returns_resample * valid_mask
 
-            if self.save_extra_monitor:
-                if "target_mask" in self.extra_monitor_debug:
-                    self.extra_monitor_debug["target_mask"] = torch.cat((self.extra_monitor_debug["target_mask"],valid_mask ), dim=0)
-                else:##
-                    self.extra_monitor_debug["target_mask"] = valid_mask
         return n_step_returns, mc_returns_resample
 
     def update_critic(self):
@@ -722,14 +692,6 @@ class TopErlAgent(AbstractAgent):
             #for relativ indexing: adapting idx_s, idx_a
             #seg_start_idx_pred = seg_start_idx[..., 0][..., None] * torch.ones_like(seg_start_idx)
             #seg_actions_idx_pred = seg_actions_idx[..., 0, :][..., None, :] * torch.ones_like(seg_actions_idx)
-
-            if self.save_extra_monitor:
-                if "vq_c_state" in self.extra_monitor_debug:
-                    self.extra_monitor_debug["vq_c_state"] = torch.cat(
-                        (self.extra_monitor_debug["vq_c_state"], c_state), dim=0)
-                else:  ##
-                    self.extra_monitor_debug["vq_c_state"] = c_state
-
             for net, target_net, opt, scaler in self.critic_nets_and_opt():
                 # Use mix precision for faster computation
                 with autocast_if(self.use_mix_precision):
@@ -756,22 +718,11 @@ class TopErlAgent(AbstractAgent):
                     vq_pred[..., 1:] = vq_pred[..., 1:] * valid_mask
                     targets[..., 1:] = targets[..., 1:] * valid_mask
 
-                    if self.save_extra_monitor:
-                        if "total_mask" in self.extra_monitor_debug:
-                            self.extra_monitor_debug["total_mask"] = torch.cat(
-                                (self.extra_monitor_debug["total_mask"], valid_mask), dim=0)
-                        else:  ##
-                            self.extra_monitor_debug["total_mask"] = valid_mask
-
-
                     # Loss
                     critic_loss = torch.nn.functional.mse_loss(vq_pred, targets)
-                    print(f"critic loss: {critic_loss} \t vq_pred: {vq_pred.mean().item()} \t targets: {targets.mean().item()} \t mc_return: {mc_returns_resample.mean().item()}")
+                    #print(f"critic loss: {critic_loss} \t vq_pred: {vq_pred.mean().item()} \t targets: {targets.mean().item()} \t mc_return: {mc_returns_resample.mean().item()}")
                 # Update critic net parameters
                 opt.zero_grad(set_to_none=True)
-                if self.save_extra_monitor:
-                    if len(self.extra_monitor_debug["total_mask"]) > 50000:
-                        pass
                 # critic_loss.backward()
                 scaler.scale(critic_loss).backward()
 
