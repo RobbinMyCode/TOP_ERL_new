@@ -45,7 +45,7 @@ params:
       old_policy_update_rate: 0.005  # update rate for the old policy from the current policy
       batch_size: 512
       critic_update_from: 300
-      policy_update_from: 2000000
+      policy_update_from: 2000
       dtype: *dtype
       device: *device
 
