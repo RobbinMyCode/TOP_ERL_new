@@ -936,5 +936,5 @@ class TopErlAgent(AbstractAgent):
 
     def load_agent(self, log_dir: str, epoch: int):
         super().load_agent(log_dir, epoch)
-        self.sampler.load_rms(log_dir, epoch)
+        #self.sampler.load_rms(log_dir, epoch)
         self.load_pretrained_agent = True
