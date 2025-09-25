@@ -5,7 +5,7 @@ job-name: "box_random_seq_entire_rand_fixed"
 num_parallel_jobs: 120
 ntasks: 1
 cpus-per-task: 152
-time: 1500 #600 for 10 hours
+time: 2000 #600 for 10 hours
 gpus_per_rep: 1
 scheduler: horeka
 sbatch_args:
