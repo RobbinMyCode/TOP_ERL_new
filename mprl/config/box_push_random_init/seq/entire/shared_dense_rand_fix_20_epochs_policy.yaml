@@ -28,8 +28,8 @@ params:
     type: TopErlAgentMultiProcessing
     # type: TopErlAgent
     args:
-      lr_policy: 3e-4
-      lr_critic: 250e-5
+      lr_policy: 1.5e-4
+      lr_critic: 2.5e-5
       wd_policy: 1e-5
       wd_critic: 1e-5
       use_mix_precision: true

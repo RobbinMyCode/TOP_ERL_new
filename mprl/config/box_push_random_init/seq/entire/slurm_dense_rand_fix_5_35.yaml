@@ -17,7 +17,7 @@ experiment_copy_src:
 experiment_copy_auto_dst: "../../CODE_COPY/"
 ---
 name: box_random_seq_entire
-import_path: "./shared_dense_rand_fix_20_lr_critic.yaml"
+import_path: "./shared_dense_rand_fix_20_epochs_policy.yaml"
 import_exp: "box_random_seq_entire"
 
 
