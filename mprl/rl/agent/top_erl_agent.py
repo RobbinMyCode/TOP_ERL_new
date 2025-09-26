@@ -641,6 +641,8 @@ class TopErlAgent(AbstractAgent):
                     max_diff = self.reference_split_args["size_range"][1]
                 elif self.reference_split_args["split_strategy"] == "fixed_size_rand_start":
                     max_diff = self.reference_split_args["fixed_size"]
+                elif self.reference_split_args["split_strategy"] == "intra_episode_fixed_inter_rand_size":
+                    max_diff = self.reference_split_args["inter_fixed_size_range"][-1]
                 else:
                     raise NotImplementedError
 
@@ -832,6 +834,8 @@ class TopErlAgent(AbstractAgent):
                 max_diff = self.reference_split_args["size_range"][1]
             elif self.reference_split_args["split_strategy"] == "fixed_size_rand_start":
                 max_diff = self.reference_split_args["fixed_size"]
+            elif self.reference_split_args["split_strategy"] == "intra_episode_fixed_inter_rand_size":
+                max_diff = self.reference_split_args["inter_fixed_size_range"][-1]
 
             #1 extra entry as it is [s_0, a_0, ...,a_{l-1}]
             idx_in_segments = seg_start_idx[..., None] + torch.arange(max_diff +1, device=self.device)

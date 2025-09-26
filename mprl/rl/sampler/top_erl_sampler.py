@@ -187,7 +187,10 @@ class TopErlSampler(BlackBoxSampler):
             # Get time steps for traj generation
             step_times = self.get_times(episode_init_time, num_times,
                                         down_sample=False)
-            #TODO: Currently all envs in parallel get same split_index, perhaps change later for randomized
+            '''
+                Currently all envs in parallel get same split_index
+                -- should be fine (its only 4 in parallel vs 512 per update)
+            '''
             split_list = util.get_splits(step_times, self.reference_split_args)
             # Sample a trajectory using the predicted MP parameters
             #actual start

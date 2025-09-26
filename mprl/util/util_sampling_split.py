@@ -7,8 +7,11 @@ def get_splits(times, split_strategy: dict={"split_strategy": "n_equal_splits", 
         computes splits of indexes giving times-tensor according to strategy defined in split_strategy
         times: must be whole sequence -> size(-1) must be number of env interactions
 
+
         return: split_size_list: list of number of time steps for each split
             (e.g. [25, 58, 17] -> use params p1 for first 25, then p2 for 58 then p3 for 17 steps)
+
+        usage in sampler: for each set of trjactories this is called once
     '''
     if split_strategy['split_strategy'] == "n_equal_splits":
         n_splits = int(split_strategy["n_splits"])
@@ -101,14 +104,26 @@ def get_splits(times, split_strategy: dict={"split_strategy": "n_equal_splits", 
             split_size_list.append(times.size(-1) - total_size_covered)
         if len(split_size_list) < split_strategy["n_splits"]:
             split_size_list = split_size_list + [0] * (split_strategy["n_splits"] - len(split_size_list))
-        '''
-            focus_regions: [30, 80] #each value gives a seperate region 
-                                #[focus_region[i]-focus_regions_size_1way, focus_region[i]+focus_regions_size_1way], 
-                                #around where the sampling size is decreased 
-                                #-- uniformly sampled in [min_decreased_size, fixed_size] (include_last=True) 
-        focus_regions_size_1way: 20 #(half-)size of focus region
-        min_decreased_size: 10  #min sampling distance in focus region
-        '''
+
+
+    elif split_strategy["split_strategy"] == "intra_episode_fixed_inter_rand_size":
+        lower_bound, upper_bound = split_strategy["inter_fixed_size_range"]
+        #inclusive upper bound
+        fixed_size = np.random.randint(lower_bound, upper_bound+1)
+
+        split_size_list = [np.random.randint(1, fixed_size + 1)]
+        total_size_covered = split_size_list[0]
+
+        split_size_list = split_size_list + [fixed_size] * (
+                    (times.size(-1) - total_size_covered) // fixed_size)
+        total_size_covered = total_size_covered + fixed_size * (
+                    (times.size(-1) - total_size_covered) // fixed_size)
+        if times.size(-1) != total_size_covered:
+            split_size_list.append(times.size(-1) - total_size_covered)
+        if len(split_size_list) < split_strategy["n_splits"]:
+            split_size_list = split_size_list + [0] * (split_strategy["n_splits"] - len(split_size_list))
+
+
     elif split_strategy["split_strategy"] == "rand_semi_fixed_size_focus_on_region":
         focus_regions_start = np.array(split_strategy["focus_regions"]) - split_strategy["focus_regions_size_1way"]
         focus_regions_end = np.array(split_strategy["focus_regions"]) + split_strategy["focus_regions_size_1way"]
