@@ -363,7 +363,7 @@ class TopErlSampler(BlackBoxSampler):
                     # during policy and critic update
                     step_rewards = step_rewards * self.reward_scaling
 
-                # Store step rewards
+                # Store step rewards -> initialize on first valid step_rewards tensor
                 if np.sum(split_list[:split_iteration]) == 0 and split != 0:
                     step_rewards_tensor = torch.zeros(*step_rewards.size()[:-1], num_times)
 
