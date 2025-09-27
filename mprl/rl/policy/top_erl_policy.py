@@ -34,18 +34,13 @@ class TopErlPolicy(BlackBoxPolicy):
         # self.mp.show_scaled_basis(True)
         self.num_dof = self.mp.num_dof
 
-    def get_param_indexes(self, times, split_list, ref_time_list, split_starts=[]):
-        if len(split_starts)==0:
-            split_starts = np.array([0]*len(split_list))
-            for i in range(1, len(split_list)):
-                split_starts[i] = split_starts[i-1] + split_list[i-1]
-
+    def get_param_indexes(self, times, split_starts, ref_time_list):
         #invalid values get assigned first index here, then invalid times get added (total time + 1) -> never < sth in times
         valid = split_starts < ref_time_list.shape[-1]
-        split_start_time_steps = ref_time_list[split_starts * valid].to(self.device) + torch.tensor(~valid, device=self.device) * (max(ref_time_list) + 1)
+        split_start_time_steps = ref_time_list[split_starts * valid].to(self.device) + ~valid * (max(ref_time_list) + 1)
 
         if len(split_start_time_steps.shape) == 1:
-            condition_reached =  times[..., None] >= split_start_time_steps
+            condition_reached = times[..., None] >= split_start_time_steps
         else:
             condition_reached = times[..., None] >= split_start_time_steps[..., None, None, :]
 
@@ -53,6 +48,8 @@ class TopErlPolicy(BlackBoxPolicy):
         policy_indexes[policy_indexes < 0] = 0
         return policy_indexes
 
+    def get_policy_indexes_individual(self, times, split_start_indexes, ref_time_list):
+        pass
     def sample_splitted_partial_times(self, times,
                                       sample_func,
                                       splitting={"split_strategy": "n_equal_splits", "n_splits": 1},
@@ -62,15 +59,19 @@ class TopErlPolicy(BlackBoxPolicy):
         if "ref_time_list" in splitting:
             ref_time_list = splitting["ref_time_list"].to(self.device)
         times = times.to(self.device)
-
-        split_size_list = util.get_splits(ref_time_list, splitting)
-        split_start_indexes = [0] * len(split_size_list)
-        for i in range(1, len(split_start_indexes)):
-            split_start_indexes[i] = split_start_indexes[i-1] + split_size_list[i-1]
+        if "split_start_indexes" in splitting:
+            split_start_indexes = splitting["split_start_indexes"]
+        else:
+            split_size_list = util.get_splits(ref_time_list, splitting)
+            split_start_indexes = [0] * len(split_size_list)
+            for i in range(1, len(split_start_indexes)):
+                split_start_indexes[i] = split_start_indexes[i-1] + split_size_list[i-1]
 
         if splitting["split_strategy"] != "random_size_range":
-            policy_indexes = self.get_param_indexes(times, split_size_list, ref_time_list)
-            policy_start_indexes = self.get_param_indexes(sample_func_kwargs["init_time"], split_size_list, ref_time_list)
+            policy_indexes = self.get_param_indexes(times, split_start_indexes, ref_time_list)
+            #add dimension to the function for it to work analog -- then undo the last dimension again with ..., 0
+            policy_start_indexes = self.get_param_indexes(sample_func_kwargs["init_time"][..., None], split_start_indexes, ref_time_list)[..., 0]
+
 
             params = sample_func_kwargs.get("params")
             #
@@ -139,11 +140,11 @@ class TopErlPolicy(BlackBoxPolicy):
 
         #limit number of iterations to not waste too much recources
         #example: splits [25,25,25,25] -> need 26 steps to be able to have 2 changes of reference policy parameters (just to save time with leaving out unnecessary iterations)
-        max_remaining_iterations = max(times.size(-1) // max(1, np.min(split_size_list)) + 1, len(split_size_list)-1) #max(np.min(..), 1) so we do not divide by 0)
+        max_remaining_iterations = split_start_indexes.size(-1) #max(times.size(-1) // max(1, np.min(split_size_list)) + 1, len(split_size_list)-1) #max(np.min(..), 1) so we do not divide by 0)
         for iteration in range(max_remaining_iterations):
             # new index = +=1 or max index in that axis if index+1 > max valid index
             policy_start_indexes = torch.minimum(policy_start_indexes + 1,
-                                                 (len(split_size_list) -1) * torch.ones(policy_start_indexes.size(), device=self.device)).to(torch.int32)
+                                                 (split_start_indexes.size(-1) -1) * torch.ones(policy_start_indexes.size(), device=self.device)).to(torch.int32)
 
 
             if splitting.get("q_loss_strategy", "truncated") == "start_unchanged":
@@ -151,8 +152,12 @@ class TopErlPolicy(BlackBoxPolicy):
                 iteration_sample_func_kwargs["init_pos"] = torch.gather(splitting["segment_wise_init_pos"], index=segment_init_indexes.to(torch.int64), dim=-2)
                 iteration_sample_func_kwargs["init_vel"] = torch.gather(splitting["segment_wise_init_vel"], index=segment_init_indexes.to(torch.int64), dim=-2)
 
+            #not quite sure when Ineed the first case, but it existed and worked before
+            if not "split_start_indexes" in splitting:
+                init_idx = torch.tensor(split_start_indexes, device=self.device)[policy_start_indexes]
+            else:
+                init_idx = split_start_indexes[np.arange(split_start_indexes.size(0))[:, None], policy_start_indexes]
 
-            init_idx = torch.tensor(split_start_indexes, device=self.device)[policy_start_indexes]
             #not first timestep of sequence but one timestep of equal size before that
             iteration_sample_func_kwargs["init_time"] = ref_time_list[init_idx] - (ref_time_list[1] - ref_time_list[0])
 
@@ -180,7 +185,7 @@ class TopErlPolicy(BlackBoxPolicy):
 
             #basically overkill in calculation, everytime whole sequence
             smp_pos_add_i, smp_vel_add_i = \
-                sample_func(times=times, **iteration_sample_func_kwargs)
+                    sample_func(times=times, **iteration_sample_func_kwargs)
 
             #mask off all entries, where a different params/params_L should have been used as 0 -> can be added on top
             non_zero_mask_results = policy_start_indexes.unsqueeze(-1) == policy_indexes
@@ -290,6 +295,8 @@ class TopErlPolicy(BlackBoxPolicy):
             sample_func(times=times, **sample_func_kwargs)
 
         return smp_pos, smp_vel
+
+
 
     def sample(self, require_grad, params_mean, params_L,
                times, init_time, init_pos, init_vel, use_mean=False,
