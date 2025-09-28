@@ -39,13 +39,6 @@ params:
       total_train_steps: *iterations
 
 grid:
-  agent:
-    type: TopErlAgentMultiProcessing
-    # type: TopErlAgent
-    args:
-      epochs_policy: [25,30] #15 #10-50
-      epochs_critic: [40,50] #30 #10-50
-
   reference_split:
     n_splits: [2,3,5,6,7,8,9,10]
 
