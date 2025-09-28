@@ -44,8 +44,22 @@ params:
 
 list:
   reference_split:
-    n_splits:   [2]
-    fixed_size: [99]
+    n_splits:   [ 2, 2, 2, 2, 2, 2, 2, 2, 2,
+                  2, 2, 2, 2, 2, 2, 2, 2, 2,
+                  2, 2, 2, 2, 2, 2, 2, 2, 2,
+                  2, 2, 2, 2, 2, 2, 2, 2, 2,
+                  2, 2, 2, 2, 2, 2, 2, 2, 2,
+                  2, 2, 2, 2, 2, 2, 2, 2, 2,
+                  2, 2, 2, 2, 2, 2, 2, 2, 2,
+                  2, 2, 2, 2, 2, 2, 2, 2, 2]
+    fixed_size: [99, 99, 99, 99, 99, 99, 99, 99, 99,
+                 99, 99, 99, 99, 99, 99, 99, 99, 99,
+                 99, 99, 99, 99, 99, 99, 99, 99, 99,
+                 99, 99, 99, 99, 99, 99, 99, 99, 99,
+                 99, 99, 99, 99, 99, 99, 99, 99, 99,
+                 99, 99, 99, 99, 99, 99, 99, 99, 99,
+                 99, 99, 99, 99, 99, 99, 99, 99, 99,
+                 99, 99, 99, 99, 99, 99, 99, 99, 99]
     q_loss_strategy:   ["continuing", "truncated", "overconfident", "continuing", "truncated", "overconfident", "continuing",   "truncated",    "overconfident",
                          "continuing", "truncated", "overconfident", "continuing", "truncated", "overconfident", "continuing",   "truncated",    "overconfident",
                          "continuing", "truncated", "overconfident", "continuing", "truncated", "overconfident", "continuing",   "truncated",    "overconfident",
