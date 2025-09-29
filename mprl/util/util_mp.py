@@ -6,10 +6,10 @@ from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
 import mprl.util as util
 import fancy_gym
 import gymnasium as gym
-
+from .util_repeating_point_mp import ProDMPReuseSample
 
 def get_mp(**kwargs):
-    assert kwargs["type"] == "prodmp"
+    assert kwargs["type"] == "prodmp" or kwargs["type"] == "prodmp_reuse_sample"
     mp_args = kwargs["args"]
     dtype, device = util.parse_dtype_device(mp_args["dtype"], mp_args["device"])
     phase_gn = ExpDecayPhaseGenerator(tau=mp_args["tau"],
@@ -33,16 +33,29 @@ def get_mp(**kwargs):
                                     pre_compute_length_factor=5,
                                     dtype=dtype,
                                     device=device)
-    prodmp = ProDMP(basis_gn=basis_gn,
-                    num_dof=mp_args["num_dof"],
-                    auto_scale_basis=mp_args.get("auto_scale_basis", True),
-                    weights_scale=mp_args.get("weights_scale", 1),
-                    goal_scale=mp_args.get("goal_scale", 1),
-                    disable_weights=mp_args.get("disable_weights", False),
-                    disable_goal=mp_args.get("disable_goal", False),
-                    relative_goal=mp_args.get("relative_goal", False),
-                    dtype=dtype,
-                    device=device)
+    if kwargs["type"] == "prodmp":
+        prodmp = ProDMP(basis_gn=basis_gn,
+                        num_dof=mp_args["num_dof"],
+                        auto_scale_basis=mp_args.get("auto_scale_basis", True),
+                        weights_scale=mp_args.get("weights_scale", 1),
+                        goal_scale=mp_args.get("goal_scale", 1),
+                        disable_weights=mp_args.get("disable_weights", False),
+                        disable_goal=mp_args.get("disable_goal", False),
+                        relative_goal=mp_args.get("relative_goal", False),
+                        dtype=dtype,
+                        device=device)
+
+    elif kwargs["type"] == "prodmp_reuse_sample":
+        prodmp = ProDMPReuseSample(basis_gn=basis_gn,
+                        num_dof=mp_args["num_dof"],
+                        auto_scale_basis=mp_args.get("auto_scale_basis", True),
+                        weights_scale=mp_args.get("weights_scale", 1),
+                        goal_scale=mp_args.get("goal_scale", 1),
+                        disable_weights=mp_args.get("disable_weights", False),
+                        disable_goal=mp_args.get("disable_goal", False),
+                        relative_goal=mp_args.get("relative_goal", False),
+                        dtype=dtype,
+                        device=device)
     return prodmp
 
 

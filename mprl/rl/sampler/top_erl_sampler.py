@@ -277,6 +277,7 @@ class TopErlSampler(BlackBoxSampler):
                                                  init_vel=episode_init_vel,
                                                  use_mean=deterministic,
                                                  ref_time = step_times[0],
+                                                 re_use_pos_from_prev_distr = np.sum(split_list[:split_iteration]) != 0, #only false for first valid split
                                                  split_args={"split_strategy": "n_equal_splits", "n_splits": 1, "random_permute_splits": False})
 
                 # STEP_ACTION = NO MOVEMENT / DEFAULT POSITION

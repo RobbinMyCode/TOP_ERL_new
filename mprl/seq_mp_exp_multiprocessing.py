@@ -264,7 +264,7 @@ class MPExperimentMultiProcessing(experiment.AbstractIterativeExperiment):
         learn_tau = cfg["mp"]["args"].get("learn_tau", False)
         learn_delay = cfg["mp"]["args"].get("learn_delay", False)
 
-        if mp_type == "prodmp":
+        if mp_type == "prodmp" or mp_type == "prodmp_reuse_sample":
             dim_out = dof * (num_basis + 1)  # weights + goal
 
             # Disable goal if specified
@@ -273,6 +273,7 @@ class MPExperimentMultiProcessing(experiment.AbstractIterativeExperiment):
 
         elif mp_type == "promp":
             dim_out = dof * num_basis  # weights only
+
         else:
             raise NotImplementedError
 

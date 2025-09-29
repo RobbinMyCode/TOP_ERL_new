@@ -87,7 +87,7 @@ class TopErlPolicy(BlackBoxPolicy):
             for key in sample_func_kwargs:
                 iteration_sample_func_kwargs[key] = sample_func_kwargs[key]
             iteration_sample_func_kwargs["params"] = param_at_start
-
+            iteration_sample_func_kwargs.pop("re_use_pos_from_prev_distr")
 
             if "params_L" in sample_func_kwargs:
                 params_L = sample_func_kwargs.get("params_L")
@@ -95,7 +95,7 @@ class TopErlPolicy(BlackBoxPolicy):
                 iteration_sample_func_kwargs["params_L"] = param_L_at_start
 
             smp_pos_1, smp_vel_1 = \
-                sample_func(times=times, **iteration_sample_func_kwargs)
+                sample_func(times=times, re_use_pos_from_prev_distr=False, **iteration_sample_func_kwargs)
 
             # zero out timesteps that should not have been used
             smp_pos = smp_pos_1.squeeze(2) * mask.unsqueeze(-1)
@@ -185,7 +185,7 @@ class TopErlPolicy(BlackBoxPolicy):
 
             #basically overkill in calculation, everytime whole sequence
             smp_pos_add_i, smp_vel_add_i = \
-                    sample_func(times=times, **iteration_sample_func_kwargs)
+                    sample_func(times=times, re_use_pos_from_prev_distr=True, **iteration_sample_func_kwargs)
 
             #mask off all entries, where a different params/params_L should have been used as 0 -> can be added on top
             non_zero_mask_results = policy_start_indexes.unsqueeze(-1) == policy_indexes
@@ -365,7 +365,8 @@ class TopErlPolicy(BlackBoxPolicy):
                                                     init_vel=init_vel,
                                                     num_smp=num_samples,
                                                     flat_shape=False,
-                                                    splitting=split_args)
+                                                    splitting=split_args,
+                                                    re_use_pos_from_prev_distr=kwargs.get("re_use_pos_from_prev_distr", False))
             '''
             # Sample trajectory
             smp_pos, smp_vel = \
