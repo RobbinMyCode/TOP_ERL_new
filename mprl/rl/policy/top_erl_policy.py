@@ -37,7 +37,7 @@ class TopErlPolicy(BlackBoxPolicy):
     def get_param_indexes(self, times, split_starts, ref_time_list):
         #invalid values get assigned first index here, then invalid times get added (total time + 1) -> never < sth in times
         valid = split_starts < ref_time_list.shape[-1]
-        split_start_time_steps = ref_time_list[split_starts * valid].to(self.device) + ~valid * (max(ref_time_list) + 1)
+        split_start_time_steps = ref_time_list[split_starts * valid].to(self.device) + ~valid * (max(ref_time_list) )
 
         if len(split_start_time_steps.shape) == 1:
             condition_reached = times[..., None] >= split_start_time_steps

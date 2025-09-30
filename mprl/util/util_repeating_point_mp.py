@@ -60,27 +60,12 @@ class ProDMPReuseSample(ProDMP):
         # Sample parameters, shape [num_smp, *add_dim, num_mp_params]
         if not re_use_pos_from_prev_distr:
             if len(params.shape) >= 3:
-                params_smp_0 = MultivariateNormal(loc=params[:, 0],
-                                                scale_tril=params_L[:, 0],
-                                                validate_args=False).rsample([num_smp])[:, :, None, ...]
-                #projection of samples onto unit gauss
-                self.sample_relative_pos_in_distr = torch.linalg.solve_triangular(params_L[: , 0, ...][None, :, None, ...],
-                                                                             (params_smp_0 - params[:, 0,  ...][None, :, None, ...])[..., :, None],
-                                                                             upper=False)[..., 0]
-                #projection back according to params of the other splits
-                params_smp_rest = params[None, :, 1:]  + (params_L[None, :, 1:] @ self.sample_relative_pos_in_distr[..., None])[..., 0]
-
-                params_smp = torch.cat((params_smp_0, params_smp_rest), dim=-2)
+                self.sample_relative_pos_in_distr = torch.randn(num_smp, *params[:, 0].shape, device=params.device,
+                                                                dtype=params.dtype)[:, :, None, ...]
             else:
-                params_smp = MultivariateNormal(loc=params,
-                                                scale_tril=params_L,
-                                                validate_args=False).rsample([num_smp])
-                self.sample_relative_pos_in_distr = \
-                torch.linalg.solve_triangular(params_L[:, ...][None, ...],
-                                              (params_smp - params[:,  ...][None,  ...])[..., :, None],
-                                              upper=False)[..., 0]
-        else:
-            params_smp = params[None, ...] + (params_L[None, ...] @ self.sample_relative_pos_in_distr[..., None])[..., 0]
+                self.sample_relative_pos_in_distr = torch.randn(num_smp, *params.shape, device=params.device,
+                                                                dtype=params.dtype)
+        params_smp = params[None, ...] + (params_L[None, ...] @ self.sample_relative_pos_in_distr[..., None])[..., 0]
 
         if tanh_squash:
             params_smp = torch.tanh(params_smp)

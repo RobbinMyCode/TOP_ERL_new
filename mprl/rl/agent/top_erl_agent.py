@@ -301,6 +301,8 @@ class TopErlAgent(AbstractAgent):
                                        self.sampler.num_times,
                                        self.traj_has_downsample)
 
+        ref_time_list = times[0]
+
         ref_time = times[0]
         # [num_traj, traj_length] -> [num_traj, num_segments]
         #random_range case
@@ -355,9 +357,7 @@ class TopErlAgent(AbstractAgent):
                                      split_args=sampling_args_value_func,
                                      use_case = use_case,
                                      split_start_indexes=dataset["split_start_indexes"],
-                                     ref_time_list = self.sampler.get_times(dataset["episode_init_time"],
-                                       self.sampler.num_times,
-                                       self.traj_has_downsample)[0])
+                                     ref_time_list = ref_time_list)
 
         ########################################################################
         ########## Compute Q-func in the future, i.e. Eq(7) second row #########
@@ -412,11 +412,10 @@ class TopErlAgent(AbstractAgent):
             #TODO: check if thats valid
             if torch.sum(last_valid_q_idx) == 0:
                 last_valid_q_idx[-1] = True
-            try:
-                future_returns[:, -1, 0] = (
-                    future_q[:, -1, last_valid_q_idx].squeeze(-1))
-            except:
-                raise Exception()
+
+            future_returns[:, -1, 0] = (
+                future_q[:, -1, last_valid_q_idx].squeeze(-1))
+
         else:
             next_seg_start_idx = seg_start_idx[..., 1:]
             #segment goes from [0, next_start] -> start_idx of next is end of previous
@@ -660,8 +659,7 @@ class TopErlAgent(AbstractAgent):
                 seg_actions_idx = idx_in_segments[..., :-1]
                 num_seg_actions = seg_actions_idx.shape[-1]
 
-                used_split_args = self.reference_split_args.copy()
-                used_split_args["q_loss_strategy"] = "truncated"
+
 
             # [num_traj, num_segments, dim_state]
 
@@ -696,10 +694,7 @@ class TopErlAgent(AbstractAgent):
 
             mc_returns_resample_list.append(mc_returns_resample.mean().item())
             mc_returns_list.append(mc_returns_mean)
-            targets_mean = targets.mean().item()
-            targets_list.append(targets_mean)
-            targets_bias_list.append(targets_mean - mc_returns_mean)
-            targets_resample_bias_list.append( (targets - mc_returns_resample).mean().item() )
+
 
             #for relativ indexing: adapting idx_s, idx_a
             #seg_start_idx_pred = seg_start_idx[..., 0][..., None] * torch.ones_like(seg_start_idx)
@@ -718,6 +713,36 @@ class TopErlAgent(AbstractAgent):
                     #as top_erl_based actions already correspond
                     if not self.update_critic_based_on_splits:
                         valid_mask = seg_actions_idx < self.traj_length
+
+                        #in case of truncation mask out all actions -> v/q estimations that are truncated
+                        if used_split_args["v_func_estimation"] == "truncated":
+                            times = self.sampler.get_times(dataset["episode_init_time"],
+                                                           self.sampler.num_times,
+                                                           self.traj_has_downsample)
+                            ref_time_list = times[0]
+                            ref_time = times[0]
+                            # [num_traj, traj_length] -> [num_traj, num_segments]
+                            # random_range case
+                            if times.shape[0] == seg_start_idx.shape[0]:
+                                times = times[np.arange(times.shape[0])[:, None], seg_start_idx]
+                            # all fixed sizes
+                            else:
+                                times = times[:, seg_start_idx]
+
+
+                            # [num_traj, num_segments] -> [num_traj, num_segments, num_seg_actions]
+                            action_times = util.add_expand_dim(times, [-1], [num_seg_actions])
+                            time_evo = torch.linspace(0, self.sampler.dt * (num_seg_actions - 1),
+                                                      num_seg_actions, device=self.device).float()
+                            action_times = action_times + time_evo
+                            policy_indexes = self.policy.get_param_indexes(action_times,
+                                                                    dataset["split_start_indexes"],
+                                                                    ref_time_list)
+                            init_time = times - self.sampler.dt
+                            policy_start_indexes = self.policy.get_param_indexes(init_time[..., None], dataset["split_start_indexes"],
+                                                   ref_time_list)[..., 0]
+                            overlap_mask = policy_start_indexes.unsqueeze(-1) == policy_indexes
+                            valid_mask = overlap_mask & valid_mask
                     else: #also mask out actions that belong to the next segment
                         next_seg_start_idx = seg_start_idx[..., 1:]
                         valid_q_idx_split = idx_in_segments[:, :-1, :] <= next_seg_start_idx[..., None]
@@ -749,6 +774,10 @@ class TopErlAgent(AbstractAgent):
                 # Update target network
                 self.critic.update_target_net(net, target_net)
 
+            targets_mean = targets.mean().item()
+            targets_list.append(targets_mean)
+            targets_bias_list.append(targets_mean - mc_returns_mean)
+            targets_resample_bias_list.append((targets - mc_returns_resample).mean().item())
         if self.log_now:
             # Get critic update statistics
             critic_info_dict = {
@@ -926,6 +955,41 @@ class TopErlAgent(AbstractAgent):
             mask = index_list[None, None, :] < seg_len_idx[:, :, None]
             q2 = q2 * mask
             q1 = q1 * mask
+
+        #truncated update needs to mask out out-truncated steps
+        elif used_split_args["v_func_estimation"] == "truncated":
+            seg_actions_idx = idx_in_segments[..., :-1]
+            num_seg_actions = seg_actions_idx.shape[-1]
+            valid_mask = seg_actions_idx < self.traj_length
+            times = self.sampler.get_times(dataset["episode_init_time"],
+                                           self.sampler.num_times,
+                                           self.traj_has_downsample)
+            ref_time_list = times[0]
+            ref_time = times[0]
+            # [num_traj, traj_length] -> [num_traj, num_segments]
+            # random_range case
+            if times.shape[0] == seg_start_idx.shape[0]:
+                times = times[np.arange(times.shape[0])[:, None], seg_start_idx]
+            # all fixed sizes
+            else:
+                times = times[:, seg_start_idx]
+
+
+            # [num_traj, num_segments] -> [num_traj, num_segments, num_seg_actions]
+            action_times = util.add_expand_dim(times, [-1], [num_seg_actions])
+            time_evo = torch.linspace(0, self.sampler.dt * (num_seg_actions - 1),
+                                      num_seg_actions, device=self.device).float()
+            action_times = action_times + time_evo
+            policy_indexes = self.policy.get_param_indexes(action_times,
+                                                    dataset["split_start_indexes"],
+                                                    ref_time_list)
+            init_time = times - self.sampler.dt
+            policy_start_indexes = self.policy.get_param_indexes(init_time[..., None], dataset["split_start_indexes"],
+                                   ref_time_list)[..., 0]
+            overlap_mask = policy_start_indexes.unsqueeze(-1) == policy_indexes
+            valid_mask = overlap_mask & valid_mask
+            q2 = q2 * valid_mask
+            q1 = q1 * valid_mask
 
         q = torch.minimum(q1.sum(dim=-1), q2.sum(dim=-1))
 
