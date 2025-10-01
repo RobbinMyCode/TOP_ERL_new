@@ -177,7 +177,7 @@ def generate_stats(data: Union[np.ndarray, torch.Tensor, List],
     if isinstance(med, tuple):
         med = med[0]
 
-    if to_np:
+    if to_np and isinstance(data, torch.Tensor):
         mean, maxi, mini, std, med = util.to_nps(mean, maxi, mini, std, med)
 
     # Save in dictionary

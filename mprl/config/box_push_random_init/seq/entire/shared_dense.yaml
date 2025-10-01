@@ -44,8 +44,8 @@ params:
       use_old_policy: true  #can also be tried as false (but late) use a target policy as the old policy for the trust region projection
       old_policy_update_rate: 0.005  # update rate for the old policy from the current policy
       batch_size: 512
-      critic_update_from: 3 #1 # 300
-      policy_update_from: 10 #150 # 2000
+      critic_update_from: 1 #1 # 300
+      policy_update_from: 1 #150 # 2000
       dtype: *dtype
       device: *device
 
