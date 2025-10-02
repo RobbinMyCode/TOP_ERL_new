@@ -28,7 +28,7 @@ class TopErlSampler(BlackBoxSampler):
         self._num_times = self.debug_env.envs[0].spec.max_episode_steps
 
         #get reference split args
-        self.reference_split_args = kwargs.get("reference_split", {'split_strategy': 'fixed_max_size', 'split_size': 1e100})
+        self.reference_split_args = kwargs.get("reference_split", {'split_strategy': 'n_equal_splits', 'n_splits': 1})
 
         #decide maximum info for forcing terms
         self.include_pos_in_forcing_terms = kwargs.get("include_pos_in_forcing_terms", False)
@@ -146,6 +146,7 @@ class TopErlSampler(BlackBoxSampler):
         # Storage for policy results
         list_episode_params_mean = list()  # Policy mean
         list_episode_params_L = list()  # Policy covariance cholesky
+        list_mp_distr_rel_pos = list()
 
         # Storage task specified metrics
         if self.task_specified_metrics is not None:
@@ -284,7 +285,8 @@ class TopErlSampler(BlackBoxSampler):
                 else:
                     step_actions = torch.zeros((*step_times.size()[:-1], 1, num_dof*2), device=self.device)
 
-
+                if self.reference_split_args["re_use_rand_coord_from_sampler_for_updates"] and np.sum(split_list[:split_iteration]) == 0:
+                    list_mp_distr_rel_pos.append(policy.mp.get_rel_distr_pos()[0])
 
                 if self.reference_split_args["correction_completion"] == "current_idx":
                     ref_split_start_idx += split
@@ -449,6 +451,7 @@ class TopErlSampler(BlackBoxSampler):
         step_dones = torch.cat(list_step_dones, dim=0)
         step_time_limit_dones = torch.zeros_like(step_dones)
 
+
         # Down sample the trajectory to make it efficient for very long sequence
         if self.traj_downsample_factor is not None:
             step_actions = step_actions[:, ::self.traj_downsample_factor]
@@ -493,6 +496,10 @@ class TopErlSampler(BlackBoxSampler):
         results["episode_params_mean"] = \
             torch.cat(list_episode_params_mean, dim=0)
         results["episode_params_L"] = torch.cat(list_episode_params_L, dim=0)
+
+        if self.reference_split_args["re_use_rand_coord_from_sampler_for_updates"]:
+            mp_distr_rel_pos = torch.cat(list_mp_distr_rel_pos, dim=0)
+            results["mp_distr_rel_pos"] = mp_distr_rel_pos[:, None, ...] #add axis for splits/traj
 
         if self.task_specified_metrics:
             for metric in self.task_specified_metrics:

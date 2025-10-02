@@ -48,8 +48,6 @@ class TopErlPolicy(BlackBoxPolicy):
         policy_indexes[policy_indexes < 0] = 0
         return policy_indexes
 
-    def get_policy_indexes_individual(self, times, split_start_indexes, ref_time_list):
-        pass
     def sample_splitted_partial_times(self, times,
                                       sample_func,
                                       splitting={"split_strategy": "n_equal_splits", "n_splits": 1},
@@ -67,43 +65,38 @@ class TopErlPolicy(BlackBoxPolicy):
             for i in range(1, len(split_start_indexes)):
                 split_start_indexes[i] = split_start_indexes[i-1] + split_size_list[i-1]
 
-        if splitting["split_strategy"] != "random_size_range":
-            policy_indexes = self.get_param_indexes(times, split_start_indexes, ref_time_list)
-            #add dimension to the function for it to work analog -- then undo the last dimension again with ..., 0
-            policy_start_indexes = self.get_param_indexes(sample_func_kwargs["init_time"][..., None], split_start_indexes, ref_time_list)[..., 0]
+        policy_indexes = self.get_param_indexes(times, split_start_indexes, ref_time_list)
+        #add dimension to the function for it to work analog -- then undo the last dimension again with ..., 0
+        policy_start_indexes = self.get_param_indexes(sample_func_kwargs["init_time"][..., None], split_start_indexes, ref_time_list)[..., 0]
 
 
-            params = sample_func_kwargs.get("params")
-            #
-            #param_at_start = sample_func_kwargs.get("params")[..., policy_start_indexes, :]
-            i = np.arange(params.size()[0])[:, None]
-            j = np.arange(params.size()[1])[None, :]
-            param_at_start = params[i,j, policy_start_indexes, :]
+        params = sample_func_kwargs.get("params")
+        #
+        #param_at_start = sample_func_kwargs.get("params")[..., policy_start_indexes, :]
+        i = np.arange(params.size()[0])[:, None]
+        j = np.arange(params.size()[1])[None, :]
+        param_at_start = params[i,j, policy_start_indexes, :]
 
-            #get indexes->timesteps I want to adress my parameter arry with shape (512, 3, 69) with the corresponding referenceat which the policy changes --> cut off point
-            mask = policy_start_indexes.unsqueeze(-1) == policy_indexes
+        #get indexes->timesteps I want to adress my parameter arry with shape (512, 3, 69) with the corresponding referenceat which the policy changes --> cut off point
+        mask = policy_start_indexes.unsqueeze(-1) == policy_indexes
 
-            iteration_sample_func_kwargs = dict()
-            for key in sample_func_kwargs:
-                iteration_sample_func_kwargs[key] = sample_func_kwargs[key]
-            iteration_sample_func_kwargs["params"] = param_at_start
-            iteration_sample_func_kwargs.pop("re_use_pos_from_prev_distr")
+        iteration_sample_func_kwargs = dict()
+        for key in sample_func_kwargs:
+            iteration_sample_func_kwargs[key] = sample_func_kwargs[key]
+        iteration_sample_func_kwargs["params"] = param_at_start
+        iteration_sample_func_kwargs.pop("re_use_pos_from_prev_distr")
 
-            if "params_L" in sample_func_kwargs:
-                params_L = sample_func_kwargs.get("params_L")
-                param_L_at_start = params_L[i, j, policy_start_indexes, :, :]
-                iteration_sample_func_kwargs["params_L"] = param_L_at_start
+        if "params_L" in sample_func_kwargs:
+            params_L = sample_func_kwargs.get("params_L")
+            param_L_at_start = params_L[i, j, policy_start_indexes, :, :]
+            iteration_sample_func_kwargs["params_L"] = param_L_at_start
 
-            smp_pos_1, smp_vel_1 = \
-                sample_func(times=times, re_use_pos_from_prev_distr=False, **iteration_sample_func_kwargs)
+        smp_pos_1, smp_vel_1 = \
+            sample_func(times=times, re_use_pos_from_prev_distr=False, **iteration_sample_func_kwargs)
 
-            # zero out timesteps that should not have been used
-            smp_pos = smp_pos_1.squeeze(2) * mask.unsqueeze(-1)
-            smp_vel = smp_vel_1.squeeze(2) * mask.unsqueeze(-1)
-        else:
-            smp_pos, smp_vel = sample_func(times=times, **sample_func_kwargs)
-
-
+        # zero out timesteps that should not have been used
+        smp_pos = smp_pos_1.squeeze(2) * mask.unsqueeze(-1)
+        smp_vel = smp_vel_1.squeeze(2) * mask.unsqueeze(-1)
 
         ####################################################################################################
         # create positions + velocities after timestep which corresponds to first change in parameter
@@ -299,7 +292,7 @@ class TopErlPolicy(BlackBoxPolicy):
 
 
     def sample(self, require_grad, params_mean, params_L,
-               times, init_time, init_pos, init_vel, use_mean=False,
+               times, init_time, init_pos, init_vel, mp_distr_rel_pos = None, use_mean=False,
                num_samples=1, split_args={"split_strategy": "n_equal_splits", "n_splits": 1}, **kwargs):
         """
         Given a segment-wise state, rsample an action
@@ -366,7 +359,9 @@ class TopErlPolicy(BlackBoxPolicy):
                                                     num_smp=num_samples,
                                                     flat_shape=False,
                                                     splitting=split_args,
-                                                    re_use_pos_from_prev_distr=kwargs.get("re_use_pos_from_prev_distr", False))
+                                                    sampled_pos = mp_distr_rel_pos,
+                                                    re_use_pos_from_prev_distr=kwargs.get("re_use_pos_from_prev_distr", False) #not required in agent as the alignment is done by chosing the mp variant // sample_splitted
+                                                 )
             '''
             # Sample trajectory
             smp_pos, smp_vel = \

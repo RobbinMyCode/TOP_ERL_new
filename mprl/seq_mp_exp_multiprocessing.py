@@ -161,6 +161,8 @@ class MPExperimentMultiProcessing(experiment.AbstractIterativeExperiment):
             "episode_params_mean": (cfg["reference_split"]["n_splits"], policy_out_dim,),
             "episode_params_L": (cfg["reference_split"]["n_splits"], policy_out_dim, policy_out_dim),
         }
+        if cfg["reference_split"]["re_use_rand_coord_from_sampler_for_updates"]:
+            replay_buffer_data_shape["mp_distr_rel_pos"] = (1, policy_out_dim)
 
         self.replay_buffer = replay_buffer_factory(
             cfg["replay_buffer"]["type"],

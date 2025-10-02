@@ -14,9 +14,13 @@ class ProDMPReuseSample(ProDMP):
         super().__init__(basis_gn, num_dof, weights_scale, goal_scale, dtype, device, **kwargs)
         self.sample_relative_pos_in_distr = None
 
+    def get_rel_distr_pos(self):
+        return self.sample_relative_pos_in_distr
+
     def sample_trajectories(self, times=None, params=None, params_L=None,
                             init_time=None, init_pos=None, init_vel=None,
                             num_smp=1, flat_shape=False, re_use_pos_from_prev_distr=False,
+                            sampled_pos = None,
                             **kwargs):
         """
         Sample trajectories from MP
@@ -58,13 +62,15 @@ class ProDMPReuseSample(ProDMP):
         times_smp = util.add_expand_dim(times, [num_add_dim], [num_smp])
 
         # Sample parameters, shape [num_smp, *add_dim, num_mp_params]
-        if not re_use_pos_from_prev_distr:
+        if sampled_pos is None and not re_use_pos_from_prev_distr:
             if len(params.shape) >= 3:
                 self.sample_relative_pos_in_distr = torch.randn(num_smp, *params[:, 0].shape, device=params.device,
                                                                 dtype=params.dtype)[:, :, None, ...]
             else:
                 self.sample_relative_pos_in_distr = torch.randn(num_smp, *params.shape, device=params.device,
                                                                 dtype=params.dtype)
+        if sampled_pos is not None:
+            self.sample_relative_pos_in_distr = util.add_expand_dim(sampled_pos, [0], [num_smp])
         params_smp = params[None, ...] + (params_L[None, ...] @ self.sample_relative_pos_in_distr[..., None])[..., 0]
 
         if tanh_squash:
