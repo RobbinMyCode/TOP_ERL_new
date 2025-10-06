@@ -152,7 +152,7 @@ class TopErlAgent(AbstractAgent):
 
         return result_metrics
 
-    def get_random_segments(self, pad_additional=False):
+    def get_random_segments(self, pad_additional=True):
         """
         Get random segments, the number is between 1 and 25
         Args:
@@ -409,11 +409,6 @@ class TopErlAgent(AbstractAgent):
             future_returns[:, :-1, 0] = future_q[:, :-1, -1]
 
             last_valid_q_idx = idx_in_segments[-1] == traj_length
-            #weird edge case when get_random_splits stops before step 100
-            #TODO: check if thats valid
-            if torch.sum(last_valid_q_idx) == 0:
-                last_valid_q_idx[-1] = True
-
             future_returns[:, -1, 0] = (
                 future_q[:, -1, last_valid_q_idx].squeeze(-1))
 
