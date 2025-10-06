@@ -5,7 +5,7 @@ job-name: "box_random_seq_entire"
 num_parallel_jobs: 120
 ntasks: 1
 cpus-per-task: 152
-time: 2000 #600 for 10 hours
+time: 2500 #600 for 10 hours
 gpus_per_rep: 1
 scheduler: horeka
 sbatch_args:
@@ -23,7 +23,7 @@ import_exp: "box_random_seq_entire"
 repetitions: 2      # Number of repetitions, each with different random seed, 2 [for hyper paremtertuning 2] or 4 for test, 20 for paper
 reps_per_job: 4     # job id assigment
 reps_in_parallel: 4 #jobs run in parallel = # of gpus used
-iterations: &iterations 35000
+iterations: &iterations 50000
 num_checkpoints: 1
 
 # Hardware specific parameters
@@ -38,8 +38,7 @@ params:
     args:
       total_train_steps: *iterations
 
-grid:
-  reference_split:
-    use_top_erl_splits_policy: [True, False]
-    use_top_erl_splits_critic: [True, False]
+list:
+  lr_policy: [ 1.5e-4, 3e-4, 6e-6, 9e-4 ]   #grid with lr critic
+  lr_critic: [ 2.5e-5, 5e-5, 10e-5, 15e-5 ]
 

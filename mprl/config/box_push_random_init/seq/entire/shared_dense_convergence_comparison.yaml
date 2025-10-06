@@ -1,7 +1,7 @@
 # Global config
 exp_name: &exp_name "box_random_seq_entire"
 exp_path: &exp_path "../../mprl_exp_result"
-sub_exp_name: &sub_exp_name "rand_fix_99_convergence_comparison_update_variant_mp_var"
+sub_exp_name: &sub_exp_name "rand_fix_99_convergence_comparison_update_variant_mp_var_up"
 act_func_hidden: &act_func_hidden leaky_relu
 act_func_last: &act_func_last null
 dtype: &dtype "float32"
@@ -44,13 +44,13 @@ params:
       use_old_policy: true  #can also be tried as false (but late) use a target policy as the old policy for the trust region projection
       old_policy_update_rate: 0.005  # update rate for the old policy from the current policy
       batch_size: 512
-      critic_update_from: 1 #1 # 300
-      policy_update_from: 1 #150 # 2000
+      critic_update_from: 300
+      policy_update_from: 2000
       dtype: *dtype
       device: *device
 
   mp: &mp
-    type: prodmp_reuse_sample #prodmp , "prodmp_reuse_sample" if for each trajectory the same position in distrs should be sampled
+    type: prodmp #prodmp , "prodmp_reuse_sample" if for each trajectory the same position in distrs should be sampled
     args:
       num_dof: 7
       tau: 2.0
@@ -130,6 +130,8 @@ params:
                                  #"continuing" --> take last reached point of previous policy as init point for next segment (parameters are set to fit a different point then)-> may also cause issues
     v_func_estimation: "truncated" #truncated, continuing or "overconfident"
                                   #overconfident: policy which is responsible for init time predicts entire sequence for v-func estimation
+    re_use_rand_coord_from_sampler_for_updates: False
+
   critic:
     type: TopErlCritic
     args:

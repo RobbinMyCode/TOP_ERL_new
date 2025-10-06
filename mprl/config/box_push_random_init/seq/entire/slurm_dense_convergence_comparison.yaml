@@ -38,12 +38,6 @@ params:
     args:
       total_train_steps: *iterations
 
-grid:
-  mp:
-    type: ["prodmp_reuse_sample", "prodmp"]
-
-  reference_split:
-    use_top_erl_splits_policy: [True, False]
-    use_top_erl_splits_critic: [True, False]
-    q_loss_strategy: ["continuing", "truncated"]
-    v_func_estimation: ["continuing", "truncated", "overconfident"]
+list:
+  lr_policy: [1.5e-4, 3e-4, 6e-6, 9e-4]   #grid with lr critic
+  lr_critic: [2.5e-5, 5e-5, 10e-5, 15e-5] #grid with lr policy
