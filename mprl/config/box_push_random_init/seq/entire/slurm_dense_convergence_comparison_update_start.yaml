@@ -5,7 +5,7 @@ job-name: "box_random_seq_entire"
 num_parallel_jobs: 120
 ntasks: 1
 cpus-per-task: 152
-time: 2500 #600 for 10 hours
+time: 2000 #600 for 10 hours
 gpus_per_rep: 1
 scheduler: horeka
 sbatch_args:
@@ -16,14 +16,14 @@ experiment_copy_src:
 experiment_copy_auto_dst: "../../CODE_COPY/"
 ---
 name: box_random_seq_entire
-import_path: "./shared_dense_convergence_comparison_rand_from_dataset.yaml"
+import_path: "./shared_dense_convergence_comparison.yaml"
 import_exp: "box_random_seq_entire"
 
 # cw2 config
 repetitions: 2      # Number of repetitions, each with different random seed, 2 [for hyper paremtertuning 2] or 4 for test, 20 for paper
 reps_per_job: 4     # job id assigment
 reps_in_parallel: 4 #jobs run in parallel = # of gpus used
-iterations: &iterations 50000
+iterations: &iterations 35000
 num_checkpoints: 1
 
 # Hardware specific parameters
@@ -41,6 +41,5 @@ params:
 list:
   agent:
     args:
-      lr_policy: [ 1.5e-4, 3e-4, 6e-6, 9e-4 ]   #grid with lr critic
-      lr_critic: [ 2.5e-5, 5e-5, 10e-5, 15e-5]
-
+      critic_update_from: [1,   1,    1,    1, 50, 50,    50,   50, 100, 100,  100,  100, 200, 200,  200,   200, 300, 300,  300,  300]
+      policy_update_from: [1, 100, 1000, 2000, 50, 100, 1000, 2000, 100, 200, 1000, 2000, 200, 300,  1000, 2000, 300, 400, 1000, 2000]

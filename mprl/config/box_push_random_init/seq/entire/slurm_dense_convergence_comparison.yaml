@@ -39,5 +39,7 @@ params:
       total_train_steps: *iterations
 
 list:
-  lr_policy: [1.5e-4, 3e-4, 6e-6, 9e-4]   #grid with lr critic
-  lr_critic: [2.5e-5, 5e-5, 10e-5, 15e-5] #grid with lr policy
+  agent:
+    args:
+      lr_policy: [1.5e-4, 3e-4, 6e-6, 9e-4]   #grid with lr critic
+      lr_critic: [2.5e-5, 5e-5, 10e-5, 15e-5] #grid with lr policy
