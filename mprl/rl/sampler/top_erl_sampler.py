@@ -285,8 +285,9 @@ class TopErlSampler(BlackBoxSampler):
                 else:
                     step_actions = torch.zeros((*step_times.size()[:-1], 1, num_dof*2), device=self.device)
 
-                if self.reference_split_args["re_use_rand_coord_from_sampler_for_updates"] and np.sum(split_list[:split_iteration]) == 0:
+                if self.reference_split_args["re_use_rand_coord_from_sampler_for_updates"] and np.sum(split_list[:split_iteration]) == 0 and training:
                     list_mp_distr_rel_pos.append(policy.mp.get_rel_distr_pos()[0])
+
 
                 if self.reference_split_args["correction_completion"] == "current_idx":
                     ref_split_start_idx += split
@@ -497,7 +498,7 @@ class TopErlSampler(BlackBoxSampler):
             torch.cat(list_episode_params_mean, dim=0)
         results["episode_params_L"] = torch.cat(list_episode_params_L, dim=0)
 
-        if self.reference_split_args["re_use_rand_coord_from_sampler_for_updates"]:
+        if self.reference_split_args["re_use_rand_coord_from_sampler_for_updates"] and training:
             mp_distr_rel_pos = torch.cat(list_mp_distr_rel_pos, dim=0)
             results["mp_distr_rel_pos"] = mp_distr_rel_pos[:, None, ...] #add axis for splits/traj
 
