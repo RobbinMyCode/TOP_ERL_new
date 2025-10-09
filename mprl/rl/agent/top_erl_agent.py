@@ -855,7 +855,7 @@ class TopErlAgent(AbstractAgent):
         num_traj = states.shape[0]
         times = self.sampler.get_times(init_time, self.sampler.num_times,
                                        self.traj_has_downsample)
-
+        ref_time = times[0]
         # Shape of idx_in_segments [num_segments, num_seg_actions + 1]
         if not self.update_policy_based_on_dataset_splits:
             idx_in_segments = self.get_random_segments()
@@ -872,7 +872,7 @@ class TopErlAgent(AbstractAgent):
             # Broadcasting data to the correct shape
             pred_mean = util.add_expand_dim(pred_mean, [-3], [num_segments])
             pred_L = util.add_expand_dim(pred_L, [-4], [num_segments])
-            pred_at_times = times[:, idx_in_segments[..., :-1]]
+            pred_at_times = times[:, torch.clip(idx_in_segments[..., :-1], max=times.size(-1)-1)]
             used_split_args = self.reference_split_args
             use_case = "agent"
         else:
@@ -914,9 +914,7 @@ class TopErlAgent(AbstractAgent):
             split_start_indexes = dataset["split_start_indexes"],
             mp_distr_rel_pos=dataset["mp_distr_rel_pos"] if self.reference_split_args[
                 "re_use_rand_coord_from_sampler_for_updates"] else None,
-            ref_time_list=self.sampler.get_times(dataset["episode_init_time"],
-                                                 self.sampler.num_times,
-                                                 self.traj_has_downsample)[0]
+            ref_time_list=ref_time
 
         )
 
