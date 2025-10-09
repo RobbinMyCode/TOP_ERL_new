@@ -35,9 +35,9 @@ class TopErlAgent(AbstractAgent):
         #For reference splitting
         self.reference_split_args = kwargs.get("reference_split",
                                                {'split_strategy': 'n_equal_splits', 'n_splits': 1})
-        self.update_policy_based_on_splits = "rand" in self.reference_split_args[
+        self.update_policy_based_on_dataset_splits = "rand" in self.reference_split_args[
             "split_strategy"] and not self.reference_split_args.get("use_top_erl_splits_policy", False)
-        self.update_critic_based_on_splits = "rand" in self.reference_split_args[
+        self.update_critic_based_on_dataset_splits = "rand" in self.reference_split_args[
             "split_strategy"] and not self.reference_split_args.get("use_top_erl_splits_critic", False)
 
         # For off-policy learning
@@ -274,7 +274,7 @@ class TopErlAgent(AbstractAgent):
         traj_init_pos = dataset["step_desired_pos"] #desired_pos = end_pos of old trajectory at index
         traj_init_vel = dataset["step_desired_vel"]
 
-        if not self.update_critic_based_on_splits:
+        if not self.update_critic_based_on_dataset_splits:
             num_segments = idx_in_segments.shape[0]
         else:
             num_segments = idx_in_segments.shape[1]
@@ -289,7 +289,7 @@ class TopErlAgent(AbstractAgent):
             params_mean_new, params_L_new, _ \
                 = self.make_new_pred(dataset, compute_trust_region_loss=False)
 
-        if not self.update_critic_based_on_splits:
+        if not self.update_critic_based_on_dataset_splits:
             # [num_traj, num_weights] -> [num_traj, num_segments, num_weights]
             params_mean_new = util.add_expand_dim(params_mean_new, [1],
                                                   [num_segments])
@@ -340,7 +340,7 @@ class TopErlAgent(AbstractAgent):
 
 
         sampling_args_value_func = self.reference_split_args.copy()
-        if self.update_critic_based_on_splits:
+        if self.update_critic_based_on_dataset_splits:
             use_case = "aa"
         else:
             sampling_args_value_func["q_loss_strategy"] = sampling_args_value_func["v_func_estimation"]
@@ -401,14 +401,16 @@ class TopErlAgent(AbstractAgent):
         future_q = torch.minimum(future_q1, future_q2)
 
         # Find the idx where the action is the last action in the valid trajectory
-        if not self.update_critic_based_on_splits:
+        if not self.update_critic_based_on_dataset_splits:
             # Use last q as the target of the V-func
             # [num_traj, num_segments, 1 + num_seg_actions]
             # -> [num_traj, num_segments]
             # Tackle the Q-func beyond the length of the trajectory
             future_returns[:, :-1, 0] = future_q[:, :-1, -1]
 
-            last_valid_q_idx = idx_in_segments[-1] == traj_length
+            #if we cut out segments we may not reach the full traj_length
+            corrected_traj_length = min(traj_length, idx_in_segments[-1, -1])
+            last_valid_q_idx = idx_in_segments[-1] == corrected_traj_length
             future_returns[:, -1, 0] = (
                 future_q[:, -1, last_valid_q_idx].squeeze(-1))
 
@@ -460,7 +462,7 @@ class TopErlAgent(AbstractAgent):
             = torch.nn.functional.pad(future_v, (0, num_seg_actions))
 
 
-        if not self.update_critic_based_on_splits:
+        if not self.update_critic_based_on_dataset_splits:
             # [num_segments, num_seg_actions]
             v_idx = idx_in_segments[:, 1:] #segment wise indexes 0..end -> 1...end, 100 instead of 101 indexes
             # assert v_idx.max() <= traj_length
@@ -543,7 +545,7 @@ class TopErlAgent(AbstractAgent):
 
 
         # -> [num_traj, num_segments, 1 + num_seg_actions]
-        if not self.update_critic_based_on_splits:
+        if not self.update_critic_based_on_dataset_splits:
             # [num_traj, traj_length] -> [num_traj, traj_length + num_seg_actions]
             future_r_pad_zero_end \
                 = torch.nn.functional.pad(rewards, (0, num_seg_actions))
@@ -595,7 +597,7 @@ class TopErlAgent(AbstractAgent):
 
 
         #filter out invalid commulativ returns (for steps not actually done in this split)
-        if self.update_critic_based_on_splits:
+        if self.update_critic_based_on_dataset_splits:
             next_seg_start_idx = seg_start_idx[..., 1:]
             valid_q_idx_split = idx_in_segments[:, :-1, :] <= next_seg_start_idx[..., None]
             # last split will never collide with the next split_start -> add True here
@@ -632,8 +634,11 @@ class TopErlAgent(AbstractAgent):
             num_traj = states.shape[0]
             traj_length = states.shape[1]
 
-            if not self.update_critic_based_on_splits:
+            if not self.update_critic_based_on_dataset_splits:
                 idx_in_segments = self.get_random_segments()
+                last_valid_start = self.reference_split_args.get("ignore_top_erl_updates_after_index", idx_in_segments[-1, -1])
+                while idx_in_segments[-1, 0] > last_valid_start:
+                    idx_in_segments = idx_in_segments[:-1]
                 seg_start_idx = idx_in_segments[..., 0]
                 assert seg_start_idx[-1] < self.traj_length
 
@@ -707,7 +712,7 @@ class TopErlAgent(AbstractAgent):
                     # Mask out the padded actions
                     # [num_traj, num_segments, num_seg_actions]
                     #as top_erl_based actions already correspond
-                    if not self.update_critic_based_on_splits:
+                    if not self.update_critic_based_on_dataset_splits:
                         valid_mask = seg_actions_idx < self.traj_length
 
                         #in case of truncation mask out all actions -> v/q estimations that are truncated
@@ -852,8 +857,15 @@ class TopErlAgent(AbstractAgent):
                                        self.traj_has_downsample)
 
         # Shape of idx_in_segments [num_segments, num_seg_actions + 1]
-        if not self.update_policy_based_on_splits:
+        if not self.update_policy_based_on_dataset_splits:
             idx_in_segments = self.get_random_segments()
+
+            #drop some updates if wanted
+            last_valid_start = self.reference_split_args.get("ignore_top_erl_updates_after_index",
+                                                             idx_in_segments[-1, -1])
+            while idx_in_segments[-1, 0] > last_valid_start:
+                idx_in_segments = idx_in_segments[:-1]
+
             num_segments = idx_in_segments.shape[0]
             seg_start_idx = idx_in_segments[..., 0]
             seg_actions_idx = idx_in_segments[..., :-1]
@@ -910,7 +922,7 @@ class TopErlAgent(AbstractAgent):
 
         # Current state
         # [num_traj, num_segments, dim_state]
-        if not self.update_policy_based_on_splits:
+        if not self.update_policy_based_on_dataset_splits:
             c_state = states[:, seg_start_idx]
             # [num_segments] -> [num_traj, num_segments]
             seg_start_idx = util.add_expand_dim(seg_start_idx, [0],
@@ -940,7 +952,7 @@ class TopErlAgent(AbstractAgent):
             q2 = q1
 
         #mask out values from "invalid" actions from q -> set to 0 (only required for the "oversampling" in random_size_range)
-        if self.update_policy_based_on_splits:
+        if self.update_policy_based_on_dataset_splits:
             #last segment ends at index 99 as we cut out the init states, e.g. else 19 actions for splitlength 20 (=state+19 actions)
             #problem: last start at 99 -> no action generated ==> exception to the rule
             #not required for prior states as the last action leads to the initial state of the next segment -> still valid

@@ -1,7 +1,7 @@
 # Global config
 exp_name: &exp_name "box_random_seq_entire"
 exp_path: &exp_path "../../mprl_exp_result"
-sub_exp_name: &sub_exp_name "test"
+sub_exp_name: &sub_exp_name "rand_fix_99_top_erl_critic_ignore_tail_end"
 act_func_hidden: &act_func_hidden leaky_relu
 act_func_last: &act_func_last null
 dtype: &dtype "float32"
@@ -44,13 +44,13 @@ params:
       use_old_policy: true  #can also be tried as false (but late) use a target policy as the old policy for the trust region projection
       old_policy_update_rate: 0.005  # update rate for the old policy from the current policy
       batch_size: 512
-      critic_update_from: 3 #1 # 300
-      policy_update_from: 5 #150 # 2000
+      critic_update_from: 1
+      policy_update_from: 1
       dtype: *dtype
       device: *device
 
   mp: &mp
-    type: prodmp_reuse_sample #prodmp , "prodmp_reuse_sample" if for each trajectory the same position in distrs should be sampled
+    type: prodmp #prodmp , "prodmp_reuse_sample" if for each trajectory the same position in distrs should be sampled
     args:
       num_dof: 7
       tau: 2.0
@@ -102,17 +102,17 @@ params:
     split_strategy: "fixed_size_rand_start" #n_equal_splits, random_size_range, random_gauss, fixed_sizes, fixed_size_rand_start, intra_episode_fixed_inter_rand_size  _rand_semi_fixed_size_focus_on_region
     random_permute_splits: False #e.g. ranges = [12,15,36,0] -> permute that list every iteration before assignment, usable for ALL split_strategies
 
-    n_splits: 3        #MOST IMPORTANT (for n_equal_splits): defines how many policy splits will be allowed, for rand variants defines how many splits will be saved (must be large enough to fit all splits, but should not be too large due to speed)
+    n_splits: 2        #MOST IMPORTANT (for n_equal_splits): defines how many policy splits will be allowed, for rand variants defines how many splits will be saved (must be large enough to fit all splits, but should not be too large due to speed)
                         #also required for split_strategy "n_equal_splits" (if n equal sized are impossible, ITS CURRENTLY NOT SUPPORTED)
     ranges: [50, 35, 10, 5] #required for fixed_sizes --> number of steps assigned for each policy, len(ranged) = n_splits (else error)
     size_range: [15,30]  #required for split_strategy "random_size_range" -> random_size_range takes the splits from the sampler and so from the replay buffer
                           # in the q and v update as splits, so that we dont introduce new gaps
                           # will ensure that there are no splits < size_range[0] (except for first and last if next option==True)
-    fixed_size: 50 #tune from [5,10,20,30,35] 5-35      #size for intermediate splits for fixed_size_rand_start
+    fixed_size: 99 #tune from [5,10,20,30,35] 5-35      #size for intermediate splits for fixed_size_rand_start
 
     use_top_erl_splits_policy: False #if true updates policy for random splits also with random_segments instead of from each predefined segment
     use_top_erl_splits_critic: True #analog to policy but for critic update
-    ignore_top_erl_updates_after_index: 70
+    ignore_top_erl_updates_after_index: 100
 
     inter_fixed_size_range: [20, 35] #required for intra_episode_fixed_inter_rand_size
                             #--> works like fixed_size_rand_start but for each trajectory fixed_size in sampled in between the two values
@@ -132,9 +132,8 @@ params:
                                  #"continuing" --> take last reached point of previous policy as init point for next segment (parameters are set to fit a different point then)-> may also cause issues
     v_func_estimation: "truncated" #truncated, continuing or "overconfident"
                                   #overconfident: policy which is responsible for init time predicts entire sequence for v-func estimation
+    re_use_rand_coord_from_sampler_for_updates: False
 
-
-    re_use_rand_coord_from_sampler_for_updates: True
   critic:
     type: TopErlCritic
     args:
