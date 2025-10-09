@@ -130,7 +130,7 @@ params:
                                  #"start_unchanged" --> each slice has a startpoint from sampling saved in the replay buffer, with this sampling method
                                                       # bigger gaps between two consecutive segments which use different parameters may occur, but the policies start with "known startpoints"
                                  #"continuing" --> take last reached point of previous policy as init point for next segment (parameters are set to fit a different point then)-> may also cause issues
-    v_func_estimation: "truncated" #truncated, continuing or "overconfident"
+    v_func_estimation: "overconfident" #truncated, continuing or "overconfident"
                                   #overconfident: policy which is responsible for init time predicts entire sequence for v-func estimation
     re_use_rand_coord_from_sampler_for_updates: False
 
