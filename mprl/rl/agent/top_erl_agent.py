@@ -152,7 +152,7 @@ class TopErlAgent(AbstractAgent):
 
         return result_metrics
 
-    def get_random_segments(self, pad_additional=True):
+    def get_random_segments(self, pad_additional=False):
         """
         Get random segments, the number is between 1 and 25
         Args:
@@ -635,7 +635,7 @@ class TopErlAgent(AbstractAgent):
             traj_length = states.shape[1]
 
             if not self.update_critic_based_on_dataset_splits:
-                idx_in_segments = self.get_random_segments()
+                idx_in_segments = self.get_random_segments(pad_additional=True)
                 last_valid_start = self.reference_split_args.get("ignore_top_erl_updates_after_index", idx_in_segments[-1, -1])
                 while idx_in_segments[-1, 0] > last_valid_start:
                     idx_in_segments = idx_in_segments[:-1]
@@ -965,7 +965,7 @@ class TopErlAgent(AbstractAgent):
             q1 = q1 * mask
 
         #truncated update needs to mask out out-truncated steps
-        elif used_split_args["v_func_estimation"] == "truncated":
+        elif used_split_args["q_loss_strategy"] == "truncated":
             seg_actions_idx = idx_in_segments[..., :-1]
             num_seg_actions = seg_actions_idx.shape[-1]
             valid_mask = seg_actions_idx < self.traj_length
