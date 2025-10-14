@@ -858,7 +858,10 @@ class TopErlAgent(AbstractAgent):
         ref_time = times[0]
         # Shape of idx_in_segments [num_segments, num_seg_actions + 1]
         if not self.update_policy_based_on_dataset_splits:
-            idx_in_segments = self.get_random_segments()
+            if self.reference_split_args.get("policy_use_all_action_indexes", False):
+                idx_in_segments = self.get_random_segments(pad_additional=True)
+            else:
+                idx_in_segments = self.get_random_segments(pad_additional=False)
 
             #drop some updates if wanted
             last_valid_start = self.reference_split_args.get("ignore_top_erl_updates_after_index",
@@ -949,6 +952,13 @@ class TopErlAgent(AbstractAgent):
         else:
             q2 = q1
 
+        #do top erl style sample till index 99 [separate for speed purpose]
+        if self.reference_split_args.get("policy_use_all_action_indexes", False) and not self.update_policy_based_on_dataset_splits:
+            seg_actions_idx = idx_in_segments[-1, :-1] #only last one as we assert previous stops before
+            valid_mask = seg_actions_idx < self.traj_length
+            q1[:, -1, :] = q1[:, -1, :] * valid_mask
+            q2[:, -1, :] = q2[:, -1, :] * valid_mask
+
         #mask out values from "invalid" actions from q -> set to 0 (only required for the "oversampling" in random_size_range)
         if self.update_policy_based_on_dataset_splits:
             #last segment ends at index 99 as we cut out the init states, e.g. else 19 actions for splitlength 20 (=state+19 actions)
@@ -963,6 +973,8 @@ class TopErlAgent(AbstractAgent):
             mask = index_list[None, None, :] < seg_len_idx[:, :, None]
             q2 = q2 * mask
             q1 = q1 * mask
+
+
 
         #truncated update needs to mask out out-truncated steps
         elif used_split_args["q_loss_strategy"] == "truncated":

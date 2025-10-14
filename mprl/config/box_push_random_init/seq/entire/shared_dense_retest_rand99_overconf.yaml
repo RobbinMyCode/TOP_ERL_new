@@ -1,7 +1,7 @@
 # Global config
 exp_name: &exp_name "box_random_seq_entire"
 exp_path: &exp_path "../../mprl_exp_result"
-sub_exp_name: &sub_exp_name "test"
+sub_exp_name: &sub_exp_name "rand_fix_99_overconf"
 act_func_hidden: &act_func_hidden leaky_relu
 act_func_last: &act_func_last null
 dtype: &dtype "float32"
@@ -44,8 +44,8 @@ params:
       use_old_policy: true  #can also be tried as false (but late) use a target policy as the old policy for the trust region projection
       old_policy_update_rate: 0.005  # update rate for the old policy from the current policy
       batch_size: 512
-      critic_update_from: 300 #1 # 300
-      policy_update_from: 2000 #150 # 2000
+      critic_update_from: 1 #1 # 300
+      policy_update_from: 1 #150 # 2000
       dtype: *dtype
       device: *device
 
@@ -110,9 +110,9 @@ params:
                           # will ensure that there are no splits < size_range[0] (except for first and last if next option==True)
     fixed_size: 99 #tune from [5,10,20,30,35] 5-35      #size for intermediate splits for fixed_size_rand_start
 
-    use_top_erl_splits_policy: True #if true updates policy for random splits also with random_segments instead of from each predefined segment
+    use_top_erl_splits_policy: False #if true updates policy for random splits also with random_segments instead of from each predefined segment
     use_top_erl_splits_critic: True #analog to policy but for critic update
-    policy_use_all_action_indexes: True #ONLY FOR TOP_ERL_UPDATES, if True -> add a smaller segment at the end of the random segments if it does not include action with last index
+    policy_use_all_action_indexes: False #ONLY FOR TOP_ERL_UPDATES, if True -> add a smaller segment at the end of the random segments if it does not include action with last index
 
     ignore_top_erl_updates_after_index: 9999
 
