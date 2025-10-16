@@ -384,6 +384,14 @@ class TopErlAgent(AbstractAgent):
             a_idx = util.add_expand_dim(idx_in_segments[..., :-1],
                                         [0], [num_traj])
 
+        kwargs = {}
+        if self.reference_split_args.get("add_d_state_to_critic", False):
+            if self.update_critic_based_on_dataset_splits:
+                kwargs["idx_d"] = c_idx
+                kwargs["d_state"] = c_state
+            else:
+                kwargs["idx_d"] = torch.sum(c_idx[..., None] >= dataset["split_start_indexes"][..., None, :], dim=-1)
+                kwargs["d_state"] = states[np.arange(states.shape[0])[:, None], kwargs["idx_d"]]
 
         # Use mix precision for faster computation
         with autocast_if(self.use_mix_precision):
@@ -391,12 +399,12 @@ class TopErlAgent(AbstractAgent):
             future_q1 = self.critic.critic(self.critic.target_net1,
                                            state=c_state,
                                            actions=actions,
-                                           idx_s=c_idx, idx_a=a_idx)
+                                           idx_s=c_idx, idx_a=a_idx, kwargs=kwargs)
             if not self.critic.single_q:
                 future_q2 = self.critic.critic(self.critic.target_net2,
                                                state=c_state,
                                                actions=actions,
-                                               idx_s=c_idx, idx_a=a_idx)
+                                               idx_s=c_idx, idx_a=a_idx, kwargs=kwargs)
             else:
                 future_q2 = future_q1
 
@@ -441,6 +449,13 @@ class TopErlAgent(AbstractAgent):
         # [num_traj, traj_length, dim_state]
         c_state = states
 
+        if self.reference_split_args.get("add_d_state_to_critic", False):
+            if self.update_critic_based_on_dataset_splits:
+                kwargs["idx_d"] = c_idx
+                kwargs["d_state"] = c_state
+            else:
+                kwargs["idx_d"] = torch.sum(c_idx[..., None] >= dataset["split_start_indexes"][..., None, :], dim=-1)
+                kwargs["d_state"] = states[np.arange(states.shape[0])[:, None], kwargs["idx_d"]]
 
         # Use mix precision for faster computation
         with autocast_if(self.use_mix_precision):
@@ -448,12 +463,12 @@ class TopErlAgent(AbstractAgent):
             future_v1 = self.critic.critic(self.critic.target_net1,
                                            state=c_state,
                                            actions=None,
-                                           idx_s=c_idx, idx_a=None).squeeze(-1)
+                                           idx_s=c_idx, idx_a=None, kwargs=kwargs).squeeze(-1)
             if not self.critic.single_q:
                 future_v2 = self.critic.critic(self.critic.target_net2,
                                                state=c_state,
                                                actions=None,
-                                               idx_s=c_idx, idx_a=None).squeeze(-1)
+                                               idx_s=c_idx, idx_a=None, kwargs=kwargs).squeeze(-1)
             else:
                 future_v2 = future_v1
 
@@ -701,6 +716,15 @@ class TopErlAgent(AbstractAgent):
 
             #for relativ indexing: adapting idx_s, idx_a
             #seg_start_idx_pred = seg_start_idx[..., 0][..., None] * torch.ones_like(seg_start_idx)
+            kwargs={}
+            if self.reference_split_args.get("add_d_state_to_critic", False):
+                if self.update_critic_based_on_dataset_splits:
+                    kwargs["idx_d"] = seg_start_idx
+                    kwargs["d_state"] = c_state
+                else:
+                    kwargs["idx_d"] = torch.sum(seg_start_idx[..., None] >= dataset["split_start_indexes"][..., None, :],
+                                                dim=-1)
+                    kwargs["d_state"] = states[np.arange(states.shape[0])[:, None], kwargs["idx_d"]]
             #seg_actions_idx_pred = seg_actions_idx[..., 0, :][..., None, :] * torch.ones_like(seg_actions_idx)
             for net, target_net, opt, scaler in self.critic_nets_and_opt():
                 # Use mix precision for faster computation
@@ -708,7 +732,7 @@ class TopErlAgent(AbstractAgent):
                     # [num_traj, num_segments, 1 + num_seg_actions]
                     vq_pred = self.critic.critic(
                         net=net, state=c_state, actions=seg_actions,
-                        idx_s=seg_start_idx, idx_a=seg_actions_idx)
+                        idx_s=seg_start_idx, idx_a=seg_actions_idx, kwargs=kwargs)
 
 
                     # Mask out the padded actions
@@ -939,18 +963,26 @@ class TopErlAgent(AbstractAgent):
             # for relativ indexing: adapting idx_s, idx_a
             #seg_start_idx_rel = seg_start_idx[..., 0][..., None] * torch.ones_like(seg_start_idx)
             #seg_actions_idx_rel = seg_actions_idx[..., 0, :][..., None, :] * torch.ones_like(seg_actions_idx)
-
+        kwargs = {}
+        if self.reference_split_args.get("add_d_state_to_critic", False):
+            if self.update_critic_based_on_dataset_splits:
+                kwargs["idx_d"] = seg_start_idx
+                kwargs["d_state"] = c_state
+            else:
+                kwargs["idx_d"] = torch.sum(seg_start_idx[..., None] >= dataset["split_start_indexes"][..., None, :],
+                                            dim=-1)
+                kwargs["d_state"] = states[np.arange(states.shape[0])[:, None], kwargs["idx_d"]]
         # [num_traj, num_segments, num_seg_actions]
         # vq -> q
         q1 = self.critic.critic(net=self.critic.net1, state=c_state,
                                 actions=pred_seg_actions,
                                 idx_s=seg_start_idx,
-                                idx_a=seg_actions_idx)[..., 1:]
+                                idx_a=seg_actions_idx, kwargs=kwargs)[..., 1:]
         if not self.critic.single_q:
             q2 = self.critic.critic(net=self.critic.net2, state=c_state,
                                     actions=pred_seg_actions,
                                     idx_s=seg_start_idx,
-                                    idx_a=seg_actions_idx)[..., 1:]
+                                    idx_a=seg_actions_idx, kwargs=kwargs)[..., 1:]
         else:
             q2 = q1
 

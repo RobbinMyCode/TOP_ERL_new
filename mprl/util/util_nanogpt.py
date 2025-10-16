@@ -120,6 +120,9 @@ class CriticGPT(nn.Module):
             h=nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
             ln_f=nn.LayerNorm(config.n_embd, bias=config.bias),
         )
+        if self.config["reference_split"].get("add_d_state_to_critic", False):
+            module_dict["d_state_encoder"] = nn.Linear(config.state_dim, config.n_embd,
+                                        bias=False)
 
         if not self.use_layer_norm:
             del module_dict['ln_f']
@@ -156,7 +159,7 @@ class CriticGPT(nn.Module):
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def forward(self, state, actions, idx_s, idx_a):
+    def forward(self, state, actions, idx_s, idx_a, **kwargs):
         """
         Compute the value of one state and a sequence of actions
 
@@ -167,6 +170,8 @@ class CriticGPT(nn.Module):
             idx_a: time step indices of actions, [*add_dim, num_actions]
 
             The idx_s and idx_a are used to compute the positional embeddings
+
+        kwargs: can contain d_state + d_idx  <-- d_state = state which the current policy parmaters are from (d_idx = timestep)
 
         Returns:
             The output has multiple tokens, with the first token the V-func, and
@@ -182,6 +187,9 @@ class CriticGPT(nn.Module):
         assert t + 1 <= self.config.block_size
 
         state_emd = self.transformer.state_encoder(state).unsqueeze(-2)
+        if self.config["reference_split"].get("add_d_state_to_critic", False):
+            d_state = kwargs["d_state"]
+            d_state_emd = self.transformer.d_state_encoder(d_state).unsqueeze(-2)
         if actions is not None:
             action_emd = self.transformer.action_encoder(actions)
 
@@ -191,19 +199,29 @@ class CriticGPT(nn.Module):
 
 
             # Shape [*add_dim, num_actions + 1, n_embed]
-
-            seq_emb = torch.cat([state_emd, action_emd], dim=-2)
-
-            # Shape [*add_dim, num_actions + 1]
-            seq_pos = torch.cat([idx_s[..., None], idx_a], dim=-1)
+            if self.config["reference_split"].get("add_d_state_to_critic", False):
+                idx_d = kwargs["idx_d"]
+                seq_emb = torch.cat([d_state_emd, state_emd, action_emd], dim=-2)
+                seq_pos = torch.cat([idx_d[..., None], idx_s[..., None], idx_a], dim=-1)
+            else:
+                seq_emb = torch.cat([state_emd, action_emd], dim=-2)
+                # Shape [*add_dim, num_actions + 1]
+                seq_pos = torch.cat([idx_s[..., None], idx_a], dim=-1)
 
         else:
-            seq_emb = state_emd
-            seq_pos = idx_s[..., None]
+            if self.config["reference_split"].get("add_d_state_to_critic", False):
+                idx_d = kwargs["idx_d"]
+                seq_emb = torch.cat([d_state_emd, state_emd], dim=-2)
+                seq_pos = torch.cat([idx_d[..., None], idx_s[..., None]], dim=-1)
+            else:
+                seq_emb = state_emd
+                seq_pos = idx_s[..., None]
 
         # If relative positional embedding is used,
         # then state position is always 0, and action positions are 1, 2, ...
         if self.relative_pos:
+            if self.config["reference_split"].get("add_d_state_to_critic", False):
+                raise NotImplementedError
             # shape (1, num_actions + 1)
             seq_pos = torch.arange(0, 1 + t, dtype=torch.long,
                                    device=self.device)[None]
@@ -225,7 +243,10 @@ class CriticGPT(nn.Module):
 
         # v = x[..., 0]  # shape [*add_dim]
         # q = x[..., 1:]  # shape [*add_dim, num_actions
-        return x
+        if self.config["reference_split"].get("add_d_state_to_critic", False):
+            return x[..., 1:]
+        else:
+            return x
 
     def configure_optimizer(self, weight_decay, learning_rate, betas,
                             device_type):

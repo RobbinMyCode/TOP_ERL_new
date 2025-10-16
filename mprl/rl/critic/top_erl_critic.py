@@ -70,9 +70,9 @@ class TopErlCritic(AbstractCritic):
             opt2 = opt1
         return opt1, opt2
 
-    def critic(self, net, state, actions, idx_s, idx_a):
+    def critic(self, net, state, actions, idx_s, idx_a, kwargs):
         # Evaluate the value given input and network
-        return net(state, actions, idx_s, idx_a)
+        return net(state, actions, idx_s, idx_a, **kwargs)
 
     def eval(self):
         # Set networks to evaluation mode
