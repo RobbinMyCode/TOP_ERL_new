@@ -357,6 +357,8 @@ class TopErlAgent(AbstractAgent):
                                      split_args=sampling_args_value_func,
                                      use_case = use_case,
                                      split_start_indexes=dataset["split_start_indexes"],
+                                     segment_wise_init_pos=dataset["segment_wise_init_pos"],
+                                     segment_wise_init_vel=dataset["segment_wise_init_vel"],
                                      mp_distr_rel_pos = dataset["mp_distr_rel_pos"] if self.reference_split_args["re_use_rand_coord_from_sampler_for_updates"] else None,
                                      ref_time_list = ref_time_list)
 
