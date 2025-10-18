@@ -17,7 +17,7 @@ experiment_copy_src:
 experiment_copy_auto_dst: "../../CODE_COPY/"
 ---
 name: box_random_seq_entire
-import_path: "./slurm_dense_n=2_terl_upd_d_state_in_critic.yaml"
+import_path: "./shared_dense_n=2_overconf_x2_d_state_in_critic.yaml"
 import_exp: "box_random_seq_entire"
 
 
