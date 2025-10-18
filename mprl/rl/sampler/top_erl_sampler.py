@@ -193,6 +193,14 @@ class TopErlSampler(BlackBoxSampler):
                 -- should be fine (its only 4 in parallel vs 512 per update)
             '''
             split_list = util.get_splits(step_times, self.reference_split_args)
+
+            if not training and self.reference_split_args.get("evaluate_on_equal_splits", False):
+                split_list = util.get_splits(step_times,
+                                             {
+                                                'split_strategy': 'n_equal_splits',
+                                                'n_splits': self.reference_split_args["n_splits"]
+                                             }
+                                             )
             # Sample a trajectory using the predicted MP parameters
             #actual start
             split_start_idx = 0

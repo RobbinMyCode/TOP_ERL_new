@@ -1,7 +1,7 @@
 # Global config
 exp_name: &exp_name "box_random_seq_entire"
 exp_path: &exp_path "../../mprl_exp_result"
-sub_exp_name: &sub_exp_name "test"
+sub_exp_name: &sub_exp_name "rand_fix_99_critic_terl_upd_n_equal_eval"
 act_func_hidden: &act_func_hidden leaky_relu
 act_func_last: &act_func_last null
 dtype: &dtype "float32"
@@ -137,8 +137,7 @@ params:
 
 
     re_use_rand_coord_from_sampler_for_updates: False #only for prodmp_reuse_sample
-    add_d_state_to_critic: True #use extra d_state = decision state defining which state the parameters for the current policy are based on
-    evaluate_on_equal_splits: False #if True --> all evaluations are done with the corresponding n_equal_splits n_splits
+    evaluate_on_equal_splits: True
   critic:
     type: TopErlCritic
     args:
