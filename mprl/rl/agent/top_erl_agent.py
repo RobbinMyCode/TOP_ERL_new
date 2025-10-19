@@ -152,7 +152,7 @@ class TopErlAgent(AbstractAgent):
 
         return result_metrics
 
-    def get_random_segments(self, pad_additional=False):
+    def get_random_segments(self, pad_additional=False, fit_splits=False, split_starts=None):
         """
         Get random segments, the number is between 1 and 25
         Args:
@@ -182,11 +182,30 @@ class TopErlAgent(AbstractAgent):
         num_seg_actual = (self.traj_length - start_idx) // seg_length
         if pad_additional:
             num_seg_actual += 1
+        if fit_splits:
+            num_seg_actual += split_starts.shape[-1]
         idx_in_segments = torch.arange(0, num_seg_actual * seg_length,
                                        device=self.device) + start_idx
         idx_in_segments = idx_in_segments.view(-1, seg_length)
         idx_in_segments = torch.cat([idx_in_segments,
                                      idx_in_segments[:, -1:] + 1], dim=-1)
+
+
+        if fit_splits:
+            assert  self.reference_split_args['split_strategy'] == 'n_equal_splits', "exact split hit only supported for n equal splits"
+            #in n_equal case all split_starts are the same, else this does not work
+            split_starts = split_starts[0]
+            n_th_split_start = 1
+            for idx, idx_val_row in enumerate(idx_in_segments):
+                if idx_val_row[0] >= split_starts[n_th_split_start]:
+                    idx_in_segments[idx:] += split_starts[n_th_split_start] - idx_in_segments[idx, 0]
+                    n_th_split_start += 1
+                    if n_th_split_start > split_starts.shape[0] - 1:
+                        break
+            relevant_idx = 0 if pad_additional else -1
+            while idx_in_segments[-1, relevant_idx] >= self.traj_length:
+                idx_in_segments = idx_in_segments[:-1]
+
         if pad_additional and idx_in_segments[-1][0] == self.traj_length:
             return idx_in_segments[:-1]
         else:
@@ -344,6 +363,8 @@ class TopErlAgent(AbstractAgent):
             use_case = "aa"
         else:
             sampling_args_value_func["q_loss_strategy"] = sampling_args_value_func["v_func_estimation"]
+            if sampling_args_value_func["q_loss_strategy"] == "enforce_no_overlap_overconf":
+                sampling_args_value_func["q_loss_strategy"] = "overconfident"
             use_case = "agent"
 
         # [num_traj, num_segments, num_seg_actions, dim_action] or
@@ -652,7 +673,8 @@ class TopErlAgent(AbstractAgent):
             traj_length = states.shape[1]
 
             if not self.update_critic_based_on_dataset_splits:
-                idx_in_segments = self.get_random_segments(pad_additional=True)
+                split_start_as_ind0 = split_start_as_ind0 = "enforce_no_overlap" in self.reference_split_args["q_loss_strategy"]
+                idx_in_segments = self.get_random_segments(pad_additional=True, fit_splits=split_start_as_ind0, split_starts = dataset["split_start_indexes"])
                 last_valid_start = self.reference_split_args.get("ignore_top_erl_updates_after_index", idx_in_segments[-1, -1])
                 while idx_in_segments[-1, 0] > last_valid_start:
                     idx_in_segments = idx_in_segments[:-1]
@@ -884,10 +906,11 @@ class TopErlAgent(AbstractAgent):
         ref_time = times[0]
         # Shape of idx_in_segments [num_segments, num_seg_actions + 1]
         if not self.update_policy_based_on_dataset_splits:
+            split_start_as_ind0 = "enforce_no_overlap" in self.reference_split_args["q_loss_strategy"]
             if self.reference_split_args.get("policy_use_all_action_indexes", False):
-                idx_in_segments = self.get_random_segments(pad_additional=True)
+                idx_in_segments = self.get_random_segments(pad_additional=True, fit_splits=split_start_as_ind0, split_starts=dataset["split_start_indexes"])
             else:
-                idx_in_segments = self.get_random_segments(pad_additional=False)
+                idx_in_segments = self.get_random_segments(pad_additional=False, fit_splits=split_start_as_ind0, split_starts=dataset["split_start_indexes"])
 
             #drop some updates if wanted
             last_valid_start = self.reference_split_args.get("ignore_top_erl_updates_after_index",
@@ -903,6 +926,8 @@ class TopErlAgent(AbstractAgent):
             pred_L = util.add_expand_dim(pred_L, [-4], [num_segments])
             pred_at_times = times[:, torch.clip(idx_in_segments[..., :-1], max=times.size(-1)-1)]
             used_split_args = self.reference_split_args
+            if used_split_args["q_loss_strategy"] == "enforce_no_overlap_overconf":
+                used_split_args["q_loss_strategy"] = "overconfident"
             use_case = "agent"
         else:
             num_segments = dataset["split_start_indexes"].size(1)
