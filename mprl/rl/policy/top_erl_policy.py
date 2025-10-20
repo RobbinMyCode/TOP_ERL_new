@@ -113,35 +113,19 @@ class TopErlPolicy(BlackBoxPolicy):
             return smp_pos_1.squeeze(2), smp_vel_1.squeeze(2)
 
         if splitting.get("q_loss_strategy", "truncated") == "truncated":
-            #repeat the last valid entry for the rest of the tensor in the respective axis
-            #--> pos(time)=total angular position of robot(time) --> same = no change
-            counted_mask = torch.arange(smp_pos.size(-2), device=self.device)[None, None, :] * mask
-            maxed_mask = torch.where(counted_mask == torch.argmax(counted_mask, dim=-1).unsqueeze(-1), 1.0, 0.0)
-
-            #residual to add = last valid entry of respective quantity
-            last_entry_pos = smp_pos * maxed_mask.unsqueeze(-1)
-            addition_pos = torch.sum(last_entry_pos, dim=-2)[..., None, :]
-
-            #analogous for velocity
-            last_entry_vel = smp_vel * maxed_mask.unsqueeze(-1)
-            addition_vel = torch.sum(last_entry_vel, dim=-2)[..., None, :]
-
-            #add residual to all entries that are not filled in already
-            smp_pos = smp_pos + addition_pos * ~mask.unsqueeze(-1)
-            smp_vel = smp_vel + addition_vel * ~mask.unsqueeze(-1)
+            #return pos, vel with 0ed out masks
             return smp_pos, smp_vel
 
         #limit number of iterations to not waste too much recources
         #example: splits [25,25,25,25] -> need 26 steps to be able to have 2 changes of reference policy parameters (just to save time with leaving out unnecessary iterations)
-        max_remaining_iterations = split_start_indexes.size(-1) #max(times.size(-1) // max(1, np.min(split_size_list)) + 1, len(split_size_list)-1) #max(np.min(..), 1) so we do not divide by 0)
+        max_remaining_iterations = split_start_indexes.size(-1) - 1 #max(times.size(-1) // max(1, np.min(split_size_list)) + 1, len(split_size_list)-1) #max(np.min(..), 1) so we do not divide by 0)
         for iteration in range(max_remaining_iterations):
             # new index = +=1 or max index in that axis if index+1 > max valid index
-            policy_start_indexes = torch.minimum(policy_start_indexes + 1,
-                                                 (split_start_indexes.size(-1) -1) * torch.ones(policy_start_indexes.size(), device=self.device)).to(torch.int32)
-
+            policy_start_indexes = policy_start_indexes + 1
+            policy_start_indexes[policy_start_indexes >= split_start_indexes.size(-1)] = 0
 
             if splitting.get("q_loss_strategy", "truncated") == "start_unchanged":
-                segment_init_indexes = policy_start_indexes.unsqueeze(-1).expand(-1, -1, splitting["segment_wise_init_pos"].size(-1))
+                segment_init_indexes = policy_start_indexes.unsqueeze(-1).expand(-1, -1, splitting["segment_wise_init_pos"].size(-1)), split_start_indexes.size(-1)
                 iteration_sample_func_kwargs["init_pos"] = torch.gather(splitting["segment_wise_init_pos"], index=segment_init_indexes.to(torch.int64), dim=-2)
                 iteration_sample_func_kwargs["init_vel"] = torch.gather(splitting["segment_wise_init_vel"], index=segment_init_indexes.to(torch.int64), dim=-2)
 
@@ -155,24 +139,24 @@ class TopErlPolicy(BlackBoxPolicy):
             iteration_sample_func_kwargs["init_time"] = ref_time_list[init_idx] - (ref_time_list[1] - ref_time_list[0])
 
             if splitting.get("q_loss_strategy", "truncated") == "continuing":
-                counted_mask = torch.arange(smp_pos.size(-2), device=self.device)[None, None, :] * mask
-                maxed_mask = torch.where(counted_mask == torch.argmax(counted_mask, dim=-1).unsqueeze(-1), 1.0, 0.0)
+                count = torch.arange(smp_pos.size(-2), device=self.device)[None, None, :] #* mask
+                mask_last_valid_entry_of_split = count == (torch.sum(mask, dim=-1) -1)[..., None]
 
-                # residual to add = last valid entry of respective quantity
-                last_entry_pos = smp_pos * maxed_mask.unsqueeze(-1)
-                iteration_sample_func_kwargs["init_pos"] = torch.sum(last_entry_pos, dim=-2)
+                # residual to add = last valid entry of respective quantity #--> mask out all but the value which is last valid of last one --> new init
+                new_init_pos_as_multitensor = smp_pos * mask_last_valid_entry_of_split.unsqueeze(-1)
+                iteration_sample_func_kwargs["init_pos"] = torch.sum(new_init_pos_as_multitensor, dim=-2)
 
                 # analogous for velocity
-                last_entry_vel = smp_vel * maxed_mask.unsqueeze(-1)
-                iteration_sample_func_kwargs["init_vel"] = torch.sum(last_entry_vel, dim=-2)
+                new_init_vel_as_multitensor = smp_vel * mask_last_valid_entry_of_split.unsqueeze(-1)
+                iteration_sample_func_kwargs["init_vel"] = torch.sum(new_init_vel_as_multitensor, dim=-2)
 
-            param_idx = policy_start_indexes.unsqueeze(-1).unsqueeze(-1).to(torch.int64).expand(-1, -1, 1, params.size(-1))
+            #expand -1 as entry -> dont change that dimension
+            param_idx = policy_start_indexes[..., None, None].to(torch.int64).expand(-1, -1, -1, params.size(-1))
             param_update = torch.gather(params, dim=-2, index=param_idx).squeeze(-2)
             iteration_sample_func_kwargs["params"] = param_update
 
             if "params_L" in sample_func_kwargs:
-                param_idx = policy_start_indexes.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1).to(torch.int64).expand(-1, -1, 1,
-                                                                                                    params.size(-1), params.size(-1))
+                param_idx = policy_start_indexes[..., None, None, None].to(torch.int64).expand(-1, -1, -1, params.size(-1), params.size(-1))
                 param_L_update = torch.gather(params_L, dim=-3, index=param_idx).squeeze(-3)
                 iteration_sample_func_kwargs["params_L"] = param_L_update
 
@@ -183,15 +167,21 @@ class TopErlPolicy(BlackBoxPolicy):
             #mask off all entries, where a different params/params_L should have been used as 0 -> can be added on top
             non_zero_mask_results = policy_start_indexes.unsqueeze(-1) == policy_indexes
             #for next iteration if "continuing" methodology
-            mask = non_zero_mask_results
 
-            smp_pos_add = smp_pos_add_i.squeeze(2) * non_zero_mask_results.unsqueeze(-1)
-            smp_vel_add = smp_vel_add_i.squeeze(2) * non_zero_mask_results.unsqueeze(-1)
+            #not in previous policy index and in current
+            smp_pos_add = smp_pos_add_i.squeeze(2) * (~ mask * non_zero_mask_results).unsqueeze(-1)
+            smp_vel_add = smp_vel_add_i.squeeze(2) * (~ mask * non_zero_mask_results).unsqueeze(-1)
+
+            #new mask = not in any previous policy index (for next loop)
+            mask = torch.clip(mask + non_zero_mask_results, min=0, max=1)
 
 
             smp_pos = smp_pos + smp_pos_add
             smp_vel = smp_vel + smp_vel_add
 
+            #end early if everything has been covered
+            if mask.all():
+                break
 
         return smp_pos, smp_vel
 
