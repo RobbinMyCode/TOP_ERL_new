@@ -205,7 +205,9 @@ class TopErlAgent(AbstractAgent):
             relevant_idx = 0 if pad_additional else -1
             while idx_in_segments[-1, relevant_idx] >= self.traj_length:
                 idx_in_segments = idx_in_segments[:-1]
-
+            #TODO: THIS ONLY WORKS FOR IN POLICYUPDATE / QLOSS CORRECTLY --> makes strategy useless in v_func_est
+            if "include_0" in self.reference_split_args["q_loss_strategy"] and not num_seg==1 and idx_in_segments[0,0]!=0:
+                idx_in_segments = torch.cat([torch.arange(seg_length+1, device=self.device)[None, :], idx_in_segments], dim=0)
         if pad_additional and idx_in_segments[-1][0] == self.traj_length:
             return idx_in_segments[:-1]
         else:
@@ -363,7 +365,7 @@ class TopErlAgent(AbstractAgent):
             use_case = "aa"
         else:
             sampling_args_value_func["q_loss_strategy"] = sampling_args_value_func["v_func_estimation"]
-            if sampling_args_value_func["q_loss_strategy"] == "enforce_no_overlap_overconf":
+            if "enforce_no_overlap_overconf" in sampling_args_value_func["q_loss_strategy"]:
                 sampling_args_value_func["q_loss_strategy"] = "overconfident"
             use_case = "agent"
 
@@ -673,7 +675,7 @@ class TopErlAgent(AbstractAgent):
             traj_length = states.shape[1]
 
             if not self.update_critic_based_on_dataset_splits:
-                split_start_as_ind0 = split_start_as_ind0 = "enforce_no_overlap" in self.reference_split_args["q_loss_strategy"]
+                split_start_as_ind0 = "enforce_no_overlap" in self.reference_split_args["q_loss_strategy"]
                 idx_in_segments = self.get_random_segments(pad_additional=True, fit_splits=split_start_as_ind0, split_starts = dataset["split_start_indexes"])
                 last_valid_start = self.reference_split_args.get("ignore_top_erl_updates_after_index", idx_in_segments[-1, -1])
                 while idx_in_segments[-1, 0] > last_valid_start:
@@ -926,7 +928,7 @@ class TopErlAgent(AbstractAgent):
             pred_L = util.add_expand_dim(pred_L, [-4], [num_segments])
             pred_at_times = times[:, torch.clip(idx_in_segments[..., :-1], max=times.size(-1)-1)]
             used_split_args = self.reference_split_args
-            if used_split_args["q_loss_strategy"] == "enforce_no_overlap_overconf":
+            if "enforce_no_overlap_overconf" in used_split_args["q_loss_strategy"]:
                 used_split_args["q_loss_strategy"] = "overconfident"
             use_case = "agent"
         else:
