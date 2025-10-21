@@ -237,10 +237,9 @@ class TopErlSampler(BlackBoxSampler):
                     segment_init_pos = torch.zeros((len(split_list), *episode_init_pos.size()),
                                                    device=self.device)
 
-                if split_iteration < len(split_list) - 1:
-                    segment_init_vel[split_iteration] = episode_init_vel
-                    segment_init_pos[split_iteration] = episode_init_pos
-                else:
+                segment_init_vel[split_iteration] = episode_init_vel
+                segment_init_pos[split_iteration] = episode_init_pos
+                if split_iteration == len(split_list) - 1:
                     list_segment_wise_init_vel_it.append(segment_init_vel)
                     list_segment_wise_init_pos_it.append(segment_init_pos)
                     segment_init_vel = torch.zeros((len(split_list), *episode_init_state[..., -num_dof * 2 - 1].size()), device=self.device)

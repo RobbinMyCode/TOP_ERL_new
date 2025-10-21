@@ -951,12 +951,12 @@ class TopErlAgent(AbstractAgent):
             used_split_args["q_loss_strategy"] = "truncated"
             use_case = "just_parallel_sample_lul_this_string_does_not_matter_it_just_is_not_agent"
 
-
+        #UPDATE WE DO NOT DO THAT FOR THE SPLITTED
         # Note, here the init condition of the traj is used by all segments
         #  We found it is better than using the init condition of the segment
-        init_time = util.add_expand_dim(init_time, [-1], [num_segments])
-        init_pos = util.add_expand_dim(init_pos, [-2], [num_segments])
-        init_vel = util.add_expand_dim(init_vel, [-2], [num_segments])
+        #init_time = util.add_expand_dim(init_time, [-1], [num_segments])
+        #init_pos = util.add_expand_dim(init_pos, [-2], [num_segments])
+        #init_vel = util.add_expand_dim(init_vel, [-2], [num_segments])
 
         # Get the trajectory segments
         # [num_trajs, num_segments, num_seg_actions, num_dof]

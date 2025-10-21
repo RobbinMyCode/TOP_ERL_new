@@ -50,7 +50,7 @@ params:
       device: *device
 
   mp: &mp
-    type: prodmp #prodmp , "prodmp_reuse_sample" if for each trajectory the same position in distrs should be sampled
+    type: prodmp_reuse_sample #prodmp , "prodmp_reuse_sample" if for each trajectory the same position in distrs should be sampled
     args:
       num_dof: 7
       tau: 2.0
@@ -133,11 +133,11 @@ params:
                                                       # bigger gaps between two consecutive segments which use different parameters may occur, but the policies start with "known startpoints"
                                  #"continuing" --> take last reached point of previous policy as init point for next segment (parameters are set to fit a different point then)-> may also cause issues
                                 #enforce_no_overlap_overconf_include_0 -> enforces splits with include_0 also always updates first segment with 0 (before rand start)
-    v_func_estimation: "start_unchanged" #"overconfident" #truncated, continuing or "overconfident"
+    v_func_estimation: "continuing" #"overconfident" #truncated, continuing or "overconfident"
                                   #overconfident: policy which is responsible for init time predicts entire sequence for v-func estimation
 
 
-    re_use_rand_coord_from_sampler_for_updates: False #only for prodmp_reuse_sample
+    re_use_rand_coord_from_sampler_for_updates: True #only for prodmp_reuse_sample
     add_d_state_to_critic: False #use extra d_state = decision state defining which state the parameters for the current policy are based on
     evaluate_on_equal_splits: False #if True --> all evaluations are done with the corresponding n_equal_splits n_splits
   critic:
