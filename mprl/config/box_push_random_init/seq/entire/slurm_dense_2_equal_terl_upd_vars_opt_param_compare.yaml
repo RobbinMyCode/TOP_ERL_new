@@ -24,7 +24,7 @@ import_exp: "box_random_seq_entire"
 
 
 # cw2 config
-repetitions: 4      # Number of repetitions, each with different random seed, 2 [for hyper paremtertuning 2] or 4 for test, 20 for paper
+repetitions: 2      # Number of repetitions, each with different random seed, 2 [for hyper paremtertuning 2] or 4 for test, 20 for paper
 reps_per_job: 4     # job id assigment
 reps_in_parallel: 4 #jobs run in parallel = # of gpus used
 iterations: &iterations 35000
@@ -42,9 +42,10 @@ params:
     args:
       total_train_steps: *iterations
 
-list:
+grid:
   reference_split:
-    q_loss_strategy: ["enforce_no_overlap_overconf", "enforce_no_overlap_overconf_include_0", "overconfident"]
+    q_loss_strategy: ["enforce_no_overlap_overconf", "enforce_no_overlap_overconf_include_0", "overconfident", "continuing"]
+    v_func_estimation: ["enforce_no_overlap_overconf", "enforce_no_overlap_overconf_include_0", "overconfident", "continuing"]
 
 
 
