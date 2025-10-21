@@ -133,7 +133,7 @@ params:
                                                       # bigger gaps between two consecutive segments which use different parameters may occur, but the policies start with "known startpoints"
                                  #"continuing" --> take last reached point of previous policy as init point for next segment (parameters are set to fit a different point then)-> may also cause issues
                                 #enforce_no_overlap_overconf_include_0 -> enforces splits with include_0 also always updates first segment with 0 (before rand start)
-    v_func_estimation: "continuing" #"overconfident" #truncated, continuing or "overconfident"
+    v_func_estimation: "start_unchanged" #"overconfident" #truncated, continuing or "overconfident"
                                   #overconfident: policy which is responsible for init time predicts entire sequence for v-func estimation
 
 

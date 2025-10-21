@@ -125,7 +125,7 @@ class TopErlPolicy(BlackBoxPolicy):
             policy_start_indexes[policy_start_indexes >= split_start_indexes.size(-1)] = 0
 
             if splitting.get("q_loss_strategy", "truncated") == "start_unchanged":
-                segment_init_indexes = policy_start_indexes.unsqueeze(-1).expand(-1, -1, splitting["segment_wise_init_pos"].size(-1)), split_start_indexes.size(-1)
+                segment_init_indexes = policy_start_indexes[..., None].expand(-1, -1, splitting["segment_wise_init_pos"].size(-1))
                 iteration_sample_func_kwargs["init_pos"] = torch.gather(splitting["segment_wise_init_pos"], index=segment_init_indexes.to(torch.int64), dim=-2)
                 iteration_sample_func_kwargs["init_vel"] = torch.gather(splitting["segment_wise_init_vel"], index=segment_init_indexes.to(torch.int64), dim=-2)
 
