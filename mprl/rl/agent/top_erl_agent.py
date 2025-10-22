@@ -961,9 +961,15 @@ class TopErlAgent(AbstractAgent):
         # UPDATE WE DO NOT WANT ALL INITIAL CONDITION IDENTICAL FOR SPLITS
         if self.reference_split_args["n_splits"] != 1:
             #init condition for next segment is last step of prev action
-            init_time[:, 1:] = times[:, idx_in_segments[0:-1, -1]]
-            init_pos[:, 1:] = dataset["step_actions"][:, idx_in_segments[0:-1, -1], :7]
-            init_vel[:, 1:] = dataset["step_actions"][:, idx_in_segments[0:-1, -1], 7:]
+            clipped_indexes = torch.clip(idx_in_segments[..., 0:-1, -1], max=dataset["step_actions"].size(1)-1)
+            if not self.update_policy_based_on_dataset_splits:
+                init_time[:, 1:] = times[:, clipped_indexes]
+                init_pos[:, 1:] = dataset["step_actions"][:, clipped_indexes, :7]
+                init_vel[:, 1:] = dataset["step_actions"][:, clipped_indexes, 7:]
+            else:
+                init_time[:, 1:] = times[np.arange(times.size(0))[:, None], clipped_indexes]
+                init_pos[:, 1:] = dataset["step_actions"][np.arange(times.size(0))[:, None], clipped_indexes, :7]
+                init_vel[:, 1:] = dataset["step_actions"][np.arange(times.size(0))[:, None], clipped_indexes, 7:]
         # Get the trajectory segments
         # [num_trajs, num_segments, num_seg_actions, num_dof]
         pred_seg_actions = self.policy.sample(
