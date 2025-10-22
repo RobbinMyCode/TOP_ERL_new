@@ -951,13 +951,19 @@ class TopErlAgent(AbstractAgent):
             used_split_args["q_loss_strategy"] = "truncated"
             use_case = "just_parallel_sample_lul_this_string_does_not_matter_it_just_is_not_agent"
 
-        #UPDATE WE DO NOT DO THAT FOR THE SPLITTED
+
         # Note, here the init condition of the traj is used by all segments
         #  We found it is better than using the init condition of the segment
-        #init_time = util.add_expand_dim(init_time, [-1], [num_segments])
-        #init_pos = util.add_expand_dim(init_pos, [-2], [num_segments])
-        #init_vel = util.add_expand_dim(init_vel, [-2], [num_segments])
+        init_time = util.add_expand_dim(init_time, [-1], [num_segments]).contiguous()
+        init_pos = util.add_expand_dim(init_pos, [-2], [num_segments]).contiguous()
+        init_vel = util.add_expand_dim(init_vel, [-2], [num_segments]).contiguous()
 
+        # UPDATE WE DO NOT WANT ALL INITIAL CONDITION IDENTICAL FOR SPLITS
+        if self.reference_split_args["n_splits"] != 1:
+            #init condition for next segment is last step of prev action
+            init_time[:, 1:] = times[:, idx_in_segments[0:-1, -1]]
+            init_pos[:, 1:] = dataset["step_actions"][:, idx_in_segments[0:-1, -1], :7]
+            init_vel[:, 1:] = dataset["step_actions"][:, idx_in_segments[0:-1, -1], 7:]
         # Get the trajectory segments
         # [num_trajs, num_segments, num_seg_actions, num_dof]
         pred_seg_actions = self.policy.sample(
