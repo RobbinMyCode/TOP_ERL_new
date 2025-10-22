@@ -145,7 +145,7 @@ class MPExperimentMultiProcessing(experiment.AbstractIterativeExperiment):
         traj_length = self.sampler.num_times
 
         replay_buffer_data_shape = {
-            "step_states": (traj_length, state_dim) if not cfg["policy"]["include_pos_in_forcing_terms"] else (traj_length, state_dim+num_dof),
+            "step_states": (traj_length, state_dim) if not cfg["policy"].get("include_pos_in_forcing_terms",False) else (traj_length, state_dim+num_dof),
             "step_desired_pos": (traj_length, self.policy.num_dof),
             "step_desired_vel": (traj_length, self.policy.num_dof),
             "step_actions": (traj_length, action_dim),
@@ -161,7 +161,7 @@ class MPExperimentMultiProcessing(experiment.AbstractIterativeExperiment):
             "episode_params_mean": (cfg["reference_split"]["n_splits"], policy_out_dim,),
             "episode_params_L": (cfg["reference_split"]["n_splits"], policy_out_dim, policy_out_dim),
         }
-        if cfg["reference_split"]["re_use_rand_coord_from_sampler_for_updates"]:
+        if cfg["reference_split"].get("re_use_rand_coord_from_sampler_for_updates", False):
             replay_buffer_data_shape["mp_distr_rel_pos"] = (1, policy_out_dim)
 
         self.replay_buffer = replay_buffer_factory(
