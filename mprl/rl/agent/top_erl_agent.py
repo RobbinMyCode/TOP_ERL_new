@@ -367,6 +367,8 @@ class TopErlAgent(AbstractAgent):
             sampling_args_value_func["q_loss_strategy"] = sampling_args_value_func["v_func_estimation"]
             if "enforce_no_overlap_overconf" in sampling_args_value_func["q_loss_strategy"]:
                 sampling_args_value_func["q_loss_strategy"] = "overconfident"
+            if "enforce_no_overlap_trunc" in sampling_args_value_func["q_loss_strategy"]:
+                sampling_args_value_func["q_loss_strategy"] = "truncated"
             use_case = "agent"
 
         # [num_traj, num_segments, num_seg_actions, dim_action] or
@@ -766,7 +768,7 @@ class TopErlAgent(AbstractAgent):
                         valid_mask = seg_actions_idx < self.traj_length
 
                         #in case of truncation mask out all actions -> v/q estimations that are truncated
-                        if used_split_args["v_func_estimation"] == "truncated":
+                        if "trunc" in used_split_args["v_func_estimation"]:
                             times = self.sampler.get_times(dataset["episode_init_time"],
                                                            self.sampler.num_times,
                                                            self.traj_has_downsample)
@@ -930,6 +932,8 @@ class TopErlAgent(AbstractAgent):
             used_split_args = self.reference_split_args
             if "enforce_no_overlap_overconf" in used_split_args["q_loss_strategy"]:
                 used_split_args["q_loss_strategy"] = "overconfident"
+            if "enforce_no_overlap_trunc" in used_split_args["q_loss_strategy"]:
+                used_split_args["q_loss_strategy"] = "truncated"
             use_case = "agent"
         else:
             num_segments = dataset["split_start_indexes"].size(1)
@@ -1050,7 +1054,7 @@ class TopErlAgent(AbstractAgent):
 
 
         #truncated update needs to mask out out-truncated steps
-        elif used_split_args["q_loss_strategy"] == "truncated":
+        elif "trunc" in used_split_args["q_loss_strategy"]:
             seg_actions_idx = idx_in_segments[..., :-1]
             num_seg_actions = seg_actions_idx.shape[-1]
             valid_mask = seg_actions_idx < self.traj_length
