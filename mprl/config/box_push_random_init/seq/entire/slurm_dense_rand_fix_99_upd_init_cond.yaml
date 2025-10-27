@@ -45,8 +45,10 @@ params:
 grid:
   agent:
     args:
-      lr_policy: [1e-4, 2e-4,   3e-4,   4e-4, 5e-4, 6e-4]
-      lr_critic: [1e-5, 3.5e-5, 5e-5, 6.5e-5, 8e-5, 1e-4]
+      lr_policy: [1e-4, 2e-4,   3e-4, 5e-4]
+      lr_critic: [1e-5, 3.5e-5, 5e-5, 8e-5]
+    reference_split:
+      re_use_rand_coord_from_sampler_for_updates: [ True, False ]
 
 
 
