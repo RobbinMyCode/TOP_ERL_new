@@ -122,6 +122,7 @@ class TopErlSampler(BlackBoxSampler):
         num_times = self._num_times
         num_dof = policy.num_dof
 
+
         # Storage for rollout results
         list_episode_init_time = list()
         list_episode_init_pos = list()
@@ -275,6 +276,9 @@ class TopErlSampler(BlackBoxSampler):
                     list_episode_params_L.append(episode_params_L_tensor)
 
                 if split != 0:
+                    used_split_args = self.reference_split_args.copy()
+                    used_split_args["split_strategy"] = "n_equal_splits"
+                    used_split_args["n_splits"] = 1
                     step_actions = policy.sample(require_grad=False,
                                                  params_mean=episode_params_mean,
                                                  params_L=episode_params_L,
@@ -286,7 +290,7 @@ class TopErlSampler(BlackBoxSampler):
                                                  use_mean=deterministic,
                                                  ref_time = step_times[0],
                                                  re_use_pos_from_prev_distr = np.sum(split_list[:split_iteration]) != 0, #only false for first valid split
-                                                 split_args={"split_strategy": "n_equal_splits", "n_splits": 1, "random_permute_splits": False})
+                                                 split_args=used_split_args)
 
                 # STEP_ACTION = NO MOVEMENT / DEFAULT POSITION
                 else:

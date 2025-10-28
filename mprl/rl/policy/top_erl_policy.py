@@ -91,6 +91,11 @@ class TopErlPolicy(BlackBoxPolicy):
             param_L_at_start = params_L[i, j, policy_start_indexes, :, :]
             iteration_sample_func_kwargs["params_L"] = param_L_at_start
 
+        time_dependence = splitting.get("include_time_in_states", True)
+        if not time_dependence:
+            times[..., 1:, :] = times[..., 1:, :] - times[..., 1:, 0][..., None] + times[..., 0, 0][..., None, None]
+            sample_func_kwargs["init_time"] = sample_func_kwargs["init_time"] * 0
+
         smp_pos_1, smp_vel_1 = \
             sample_func(times=times, re_use_pos_from_prev_distr=False, **iteration_sample_func_kwargs)
 
@@ -160,6 +165,11 @@ class TopErlPolicy(BlackBoxPolicy):
                 param_L_update = torch.gather(params_L, dim=-3, index=param_idx).squeeze(-3)
                 iteration_sample_func_kwargs["params_L"] = param_L_update
 
+            time_dependence = splitting.get("include_time_in_states", True)
+            if not time_dependence:
+                times[..., 1:, :] = times[..., 1:, :] - times[..., 1:, 0] + times[..., 0, 0]
+                iteration_sample_func_kwargs["init_time"] = sample_func_kwargs["init_time"] * 0
+
             #basically overkill in calculation, everytime whole sequence
             smp_pos_add_i, smp_vel_add_i = \
                     sample_func(times=times, re_use_pos_from_prev_distr=True, **iteration_sample_func_kwargs)
@@ -186,94 +196,16 @@ class TopErlPolicy(BlackBoxPolicy):
         return smp_pos, smp_vel
 
 
-    def sample_splitted(self, times, sample_func, splitting={"split_strategy": "n_equal_splits", "n_splits": 1}, **sample_func_kwargs):
-        '''
-            called in sample to sample with changing "reference points" (defined in times)
-        Args:
-            times: timepoints to evaluate pos+vel
-            sample_func: function to sample trajectories from
-            splitting: dict: [split_strategy:str, split options (different args for different split_stragegies]
-                split_strategy:
-                    "fixed_max_size":       split in segments, maximally as big as the arg
-                    "n_equal_splits":       split into n equal parts (+one for the rest if num_samples is not a multiple)
-                    "random_size_range":    randomized segment sizes, uniformly distributed from x to y (different values each call)
-                    "random_gauss":         randomized segment sizes, gaussian distributed around mean with std
-
-                    -> for every strategy if it does not fully cover the data and the next segment would "overcover" it a smaller segment is added in the end
-                args:
-                    split_size: int         #required for split strategy "fixed_max_size"
-                    n_splits: int           #required for split_strategy "n_equal_splits"
-                    size_range: [int,int]   #required for split_strategy "random_size_range"
-                    mean_std: [int,int]     #required for split_strategy "random_gauss"
-            **sample_func_kwargs: all arguments of sample func (except times) [params, params_L, .... ]
-
-        Returns:
-            pos and vel trajectories
-            shape 2 x [*add_dim, num_samples, num_times, num_dof]
-        '''
-        init_time = sample_func_kwargs["init_time"]
-        num_smp = sample_func_kwargs.get("num_smp", 1)
-
-        split_size_list = util.get_splits(times, splitting)
-        smp_pos, smp_vel = \
-            sample_func(times=times[..., :split_size_list[0]], **sample_func_kwargs)
-
-        iteration_sample_func_kwargs = sample_func_kwargs.copy()
-        iteration_sample_func_kwargs.pop('init_pos', None)
-        iteration_sample_func_kwargs.pop('init_vel', None)
-        iteration_sample_func_kwargs.pop('init_time', None)
-        if "num_smp" in iteration_sample_func_kwargs.keys():
-            iteration_sample_func_kwargs['num_smp'] = 1 #only 1 sample per intermediate point/step, else we have exponentially many
-
-
-        # if we have multiple stops --> sample sub trajectories from there
-        # initial conditions: time and pos+vel after first n time steps (after first sample_trajectories call)
-        smp_pos_xn = smp_pos
-        smp_vel_xn = smp_vel
-
-        #curr_init_time = init_time
-        curr_time_idx = 0 #will be increased in loop before usage
-        for time_split_idx in range(1, len(split_size_list)):
-            #give just large enough tensors for pos and vel (no additional empty entries)
-            curr_split_size = split_size_list[time_split_idx]
-            if curr_split_size == 0:
-                continue
-            #pos_xn = torch.empty_like(smp_pos)[..., :curr_split_size, :]
-            #vel_xn = torch.empty_like(smp_vel)[..., :curr_split_size, :]
-            
-            # start conditions for current loop
-            prev_pos_tensor = smp_pos_xn #last timestep, all samples
-            prev_vel_tensor = smp_vel_xn
-            curr_time_idx += split_size_list[time_split_idx-1]
-
-            for sample_n in range(num_smp):
-                smp_pos_xi, smp_vel_xi = \
-                    sample_func(times=times[..., curr_time_idx : curr_time_idx + curr_split_size ] if splitting["correction_completion"]== "current_idx" else times[..., 0 : 0 + curr_split_size ],
-                                init_pos=prev_pos_tensor[..., -1, :].squeeze(-2) if num_smp == 1 \
-                                    else prev_pos_tensor[..., sample_n, -1, :].squeeze(-2),
-                                init_vel=prev_vel_tensor[..., -1, :].squeeze(-2) if num_smp == 1 \
-                                    else prev_vel_tensor[..., sample_n, -1, :].squeeze(-2),
-                                init_time=times[..., curr_time_idx - 1].squeeze(-1) if splitting["correction_completion"]== "current_idx" else init_time,
-                                **iteration_sample_func_kwargs)
-
-                # most likely if case not needed as output shape will be [..., 1, num_times, num_dof]
-                if num_smp == 1:
-                    smp_pos_xn = smp_pos_xi
-                    smp_vel_xn = smp_vel_xi
-                else:
-                    #adapt the positions to not add exra steps that are not used // keep all states if previous was smaller
-                    if curr_split_size != smp_pos_xn.size(-2) and sample_n == 0:
-                        smp_pos_xn = torch.zeros(*smp_pos_xn.size()[:-2], curr_split_size, smp_pos_xn.size(-1))
-                        smp_vel_xn = torch.zeros(*smp_vel_xn.size()[:-2], curr_split_size, smp_vel_xn.size(-1)) #smp_vel_xn[..., :curr_split_size, :]
-                    smp_pos_xn[..., sample_n, :, :] = smp_pos_xi
-                    smp_vel_xn[..., sample_n, :, :] = smp_vel_xi
-
-            smp_pos = torch.cat([smp_pos, smp_pos_xn], dim=-2)
-            smp_vel = torch.cat([smp_vel, smp_vel_xn], dim=-2)
-
-        return smp_pos, smp_vel
-
     def sample_once(self, times, sample_func, splitting=None, **sample_func_kwargs):
+
+        time_dependence = splitting.get("include_time_in_states", True)
+        if not time_dependence:
+            try:
+                times[..., 1:, :] = times[..., 1:, :] - times[..., 1:, 0][..., None] + times[..., 0, 0][..., None, None]
+            except:
+                pass
+            sample_func_kwargs["init_time"] = sample_func_kwargs["init_time"] * 0
+
         smp_pos, smp_vel = \
             sample_func(times=times, **sample_func_kwargs)
 

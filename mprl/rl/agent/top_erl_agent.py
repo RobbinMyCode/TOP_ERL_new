@@ -223,6 +223,11 @@ class TopErlAgent(AbstractAgent):
         # Decision state
         # [num_traj, n_splits, dim_state]
         d_state = states[torch.arange(num_traj, device=self.device).unsqueeze(-1), dataset["split_start_indexes"]]
+        time_dependence = self.reference_split_args.get("include_time_in_states", True)
+        if not time_dependence:
+            actions_in_state = dataset["step_actions"].shape[-1]
+            d_state[..., -actions_in_state - 1] = 0
+            states[..., -actions_in_state - 1] = 0
 
         if self.use_old_policy:
             with torch.no_grad():
@@ -409,6 +414,12 @@ class TopErlAgent(AbstractAgent):
             a_idx = util.add_expand_dim(idx_in_segments[..., :-1],
                                         [0], [num_traj])
 
+        time_dependence = self.reference_split_args.get("include_time_in_states", True)
+        if not time_dependence:
+            actions_in_state = actions.shape[-1]
+            c_state[..., -actions_in_state - 1] = 0
+            states[..., -actions_in_state - 1] = 0
+
         kwargs = {}
         if self.reference_split_args.get("add_d_state_to_critic", False):
             if self.update_critic_based_on_dataset_splits:
@@ -471,8 +482,9 @@ class TopErlAgent(AbstractAgent):
         c_idx = torch.arange(traj_length, device=self.device).long()
         c_idx = util.add_expand_dim(c_idx, [0], [num_traj]) #512, 100
 
-        # [num_traj, traj_length, dim_state]
+        # [num_traj, traj_length, dim_state], states is already reduced earlier if no time i nstate
         c_state = states
+
 
         if self.reference_split_args.get("add_d_state_to_critic", False):
             if self.update_critic_based_on_dataset_splits:
@@ -740,8 +752,12 @@ class TopErlAgent(AbstractAgent):
             mc_returns_list.append(mc_returns_mean)
 
 
-            #for relativ indexing: adapting idx_s, idx_a
-            #seg_start_idx_pred = seg_start_idx[..., 0][..., None] * torch.ones_like(seg_start_idx)
+            time_dependence = self.reference_split_args.get("include_time_in_states", True)
+            if not time_dependence:
+                actions_in_state = actions.shape[-1]
+                c_state[..., -actions_in_state - 1] = 0
+                states[..., -actions_in_state - 1] = 0
+
             kwargs={}
             if self.reference_split_args.get("add_d_state_to_critic", False):
                 if self.update_critic_based_on_dataset_splits:
@@ -1006,6 +1022,13 @@ class TopErlAgent(AbstractAgent):
             # for relativ indexing: adapting idx_s, idx_a
             #seg_start_idx_rel = seg_start_idx[..., 0][..., None] * torch.ones_like(seg_start_idx)
             #seg_actions_idx_rel = seg_actions_idx[..., 0, :][..., None, :] * torch.ones_like(seg_actions_idx)
+
+        time_dependence = self.reference_split_args.get("include_time_in_states", True)
+        if not time_dependence:
+            actions_in_state = pred_seg_actions.shape[-1]
+            c_state[..., -actions_in_state - 1] = 0
+            states[..., -actions_in_state - 1] = 0
+
         kwargs = {}
         if self.reference_split_args.get("add_d_state_to_critic", False):
             if self.update_critic_based_on_dataset_splits:
