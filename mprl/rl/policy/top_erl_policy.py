@@ -167,7 +167,7 @@ class TopErlPolicy(BlackBoxPolicy):
 
             time_dependence = splitting.get("include_time_in_states", True)
             if not time_dependence:
-                times[..., 1:, :] = times[..., 1:, :] - times[..., 1:, 0] + times[..., 0, 0]
+                times[..., 1:, :] = times[..., 1:, :] - times[..., 1:, 0][..., None] + times[..., 0, 0][..., None, None]
                 iteration_sample_func_kwargs["init_time"] = sample_func_kwargs["init_time"] * 0
 
             #basically overkill in calculation, everytime whole sequence
@@ -200,10 +200,8 @@ class TopErlPolicy(BlackBoxPolicy):
 
         time_dependence = splitting.get("include_time_in_states", True)
         if not time_dependence:
-            try:
-                times[..., 1:, :] = times[..., 1:, :] - times[..., 1:, 0][..., None] + times[..., 0, 0][..., None, None]
-            except:
-                pass
+            times[..., 1:, :] = times[..., 1:, :] - times[..., 1:, 0][..., None] + times[..., 0, 0][..., None, None]
+
             sample_func_kwargs["init_time"] = sample_func_kwargs["init_time"] * 0
 
         smp_pos, smp_vel = \
