@@ -279,6 +279,7 @@ class TopErlSampler(BlackBoxSampler):
                     used_split_args = self.reference_split_args.copy()
                     used_split_args["split_strategy"] = "n_equal_splits"
                     used_split_args["n_splits"] = 1
+                    used_split_args["use_case"] = "sampler"
                     step_actions = policy.sample(require_grad=False,
                                                  params_mean=episode_params_mean,
                                                  params_L=episode_params_L,
