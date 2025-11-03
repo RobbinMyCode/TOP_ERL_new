@@ -696,8 +696,10 @@ class TopErlAgent(AbstractAgent):
                     if (traj_length / dataset["split_start_indexes"].shape[-1]) - (
                             traj_length // dataset["split_start_indexes"].shape[-1]) != 0:
                         diff += 1
-                    idx_in_segments = dataset["split_start_indexes"][0][:, None] + torch.arange(diff+1, device=self.device)[None, :]
 
+                    idx_in_segments = dataset["split_start_indexes"][0][:, None] + torch.arange(diff+1, device=self.device)[None, :]
+                    n_splits = np.random.randint(1,26)
+                    idx_in_segments = util.add_expand_dim(idx_in_segments, [-2], [n_splits])
                 #random segments
                 else:
                     split_start_as_ind0 = "enforce_no_overlap" in self.reference_split_args["q_loss_strategy"]
@@ -950,6 +952,8 @@ class TopErlAgent(AbstractAgent):
                     diff += 1
                 idx_in_segments = dataset["split_start_indexes"][0][:, None] + \
                                   torch.arange(diff + 1, device=self.device)[None, :]
+                n_splits = np.random.randint(1, 26)
+                idx_in_segments = util.add_expand_dim(idx_in_segments, [-2], [n_splits])
             else:
                 split_start_as_ind0 = "enforce_no_overlap" in self.reference_split_args["q_loss_strategy"]
                 if self.reference_split_args.get("policy_use_all_action_indexes", False):
