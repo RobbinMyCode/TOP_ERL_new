@@ -141,8 +141,8 @@ params:
     add_d_state_to_critic: False #use extra d_state = decision state defining which state the parameters for the current policy are based on
     evaluate_on_equal_splits: False #if True --> all evaluations are done with the corresponding n_equal_splits n_splits
 
-    include_time_in_states: False #default True -> else get rid of all time infos instates
-    set_policy_update_init_cond_to_split_init: True #init conditions get mapped to last param initialization position -> true
+    include_time_in_states: True #default True -> else get rid of all time infos instates
+    set_policy_update_init_cond_to_split_init: False #init conditions get mapped to last param initialization position -> true
     segments_equal_splits: True #update on non-random segments but ones that just equal the (policy-)splits
 
 

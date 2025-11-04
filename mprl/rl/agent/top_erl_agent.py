@@ -58,6 +58,9 @@ class TopErlAgent(AbstractAgent):
         self.use_mix_precision = kwargs.get("use_mix_precision", False)
         self.critic_grad_scaler = [GradScaler(), GradScaler()]
 
+        #for running locally with smaller gpu (only required if whole traj are used)
+        max_memory_GB = torch.cuda.get_device_properties(0).total_memory // (10**9)
+        self.max_paral = 3 if max_memory_GB <= 10 else 12
 
     def get_optimizer(self, policy, critic):
         """
@@ -697,15 +700,16 @@ class TopErlAgent(AbstractAgent):
                             traj_length // dataset["split_start_indexes"].shape[-1]) != 0:
                         diff += 1
 
-                    idx_in_segments = dataset["split_start_indexes"][0][:, None] + torch.arange(diff+1, device=self.device)[None, :]
-                    n_splits = np.random.randint(1,26)
+                    idx_in_segments = (dataset["split_start_indexes"][0][:, None] + torch.arange(diff+1, device=self.device)[None, :])
+                    n_splits = np.random.randint(1,self.max_paral)
                     idx_in_segments = util.add_expand_dim(idx_in_segments, [-2], [n_splits])
+                    idx_in_segments = idx_in_segments.reshape(( np.prod(idx_in_segments.shape[:-1]), idx_in_segments.shape[-1]) )
                 #random segments
                 else:
                     split_start_as_ind0 = "enforce_no_overlap" in self.reference_split_args["q_loss_strategy"]
                     idx_in_segments = self.get_random_segments(pad_additional=True, fit_splits=split_start_as_ind0, split_starts = dataset["split_start_indexes"])
 
-                #ablation for ignoring last splits after startidx "x"
+                #ablation for ignoring last splits after given startidx
                 last_valid_start = self.reference_split_args.get("ignore_top_erl_updates_after_index", idx_in_segments[-1, -1])
                 while idx_in_segments[-1, 0] > last_valid_start:
                     idx_in_segments = idx_in_segments[:-1]
@@ -950,10 +954,14 @@ class TopErlAgent(AbstractAgent):
                 if (traj_length / dataset["split_start_indexes"].shape[-1]) - (
                         traj_length // dataset["split_start_indexes"].shape[-1]) != 0:
                     diff += 1
-                idx_in_segments = dataset["split_start_indexes"][0][:, None] + \
-                                  torch.arange(diff + 1, device=self.device)[None, :]
-                n_splits = np.random.randint(1, 26)
+
+                idx_in_segments = (
+                            dataset["split_start_indexes"][0][:, None] + torch.arange(diff + 1, device=self.device)[
+                        None, :])
+                n_splits = np.random.randint(1, self.max_paral)
                 idx_in_segments = util.add_expand_dim(idx_in_segments, [-2], [n_splits])
+                idx_in_segments = idx_in_segments.reshape(
+                    (np.prod(idx_in_segments.shape[:-1]), idx_in_segments.shape[-1]))
             else:
                 split_start_as_ind0 = "enforce_no_overlap" in self.reference_split_args["q_loss_strategy"]
                 if self.reference_split_args.get("policy_use_all_action_indexes", False):

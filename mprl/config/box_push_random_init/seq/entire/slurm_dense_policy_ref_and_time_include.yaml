@@ -45,9 +45,9 @@ params:
 grid:
   reference_split:
     n_splits: [1, 2, 3, 4, 5, 6]
-    include_time_in_states: [True, False]
+    #include_time_in_states: [True, False]
     set_policy_update_init_cond_to_split_init: [True, False] #init conditions get mapped to last param initialization position -> true
-    segments_equal_splits: [True, False] #update on non-random segments but ones that just equal the (policy-)splits
+    #segments_equal_splits: [True, False] #update on non-random segments but ones that just equal the (policy-)splits
 
 
 
