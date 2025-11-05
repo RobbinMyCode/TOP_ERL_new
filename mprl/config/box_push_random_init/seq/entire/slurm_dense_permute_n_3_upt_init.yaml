@@ -44,14 +44,19 @@ params:
 
 grid:
   reference_split:
-    random_permute_splits: [True, False] #e.g. ranges = [12,15,36,0] -> permute that list every iteration before assignment, usable for ALL split_strategies
     ranges: [
-      [ 50, 25, 25 ],
-      [ 75, 15, 10 ],
-      [ 40, 40, 30 ],
-      [ 80, 10, 10 ],
-      [90, 5, 5],
-      [49, 49, 2]
+      [ 25, 50, 25 ],
+      [ 15, 75, 10 ],
+      [  40, 30, 40 ],
+      [  10, 80, 10 ],
+      [ 5, 90, 5],
+      [ 49, 2, 49],
+      [ 25, 25, 50 ],
+      [ 15 ,10, 75 ],
+      [ 30, 40, 40 ],
+      [  10, 10, 80 ],
+      [ 5, 5, 90],
+      [ 2, 49, 49],
     ]
     #required for fixed_sizes --> number of steps assigned for each policy, len(ranged) = n_splits (else error)
 
