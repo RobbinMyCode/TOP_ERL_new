@@ -17,7 +17,7 @@ experiment_copy_src:
 experiment_copy_auto_dst: "../../CODE_COPY/"
 ---
 name: box_random_seq_entire
-import_path: "./slurm_dense_permute_n_3_upt_init.yaml"
+import_path: "./shared_dense_size_range_upd_init_n_3.yaml"
 import_exp: "box_random_seq_entire"
 
 
