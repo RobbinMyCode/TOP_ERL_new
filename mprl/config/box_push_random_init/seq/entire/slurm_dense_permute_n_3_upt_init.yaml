@@ -24,7 +24,7 @@ import_exp: "box_random_seq_entire"
 
 
 # cw2 config
-repetitions: 2      # Number of repetitions, each with different random seed, 2 [for hyper paremtertuning 2] or 4 for test, 20 for paper
+repetitions: 4      # Number of repetitions, each with different random seed, 2 [for hyper paremtertuning 2] or 4 for test, 20 for paper
 reps_per_job: 4     # job id assigment
 reps_in_parallel: 4 #jobs run in parallel = # of gpus used
 iterations: &iterations 35000
@@ -44,20 +44,7 @@ params:
 
 grid:
   reference_split:
-    ranges: [
-      [ 25, 50, 25 ],
-      [ 15, 75, 10 ],
-      [  40, 30, 40 ],
-      [  10, 80, 10 ],
-      [ 5, 90, 5],
-      [ 49, 2, 49],
-      [ 25, 25, 50 ],
-      [ 15 ,10, 75 ],
-      [ 30, 40, 40 ],
-      [  10, 10, 80 ],
-      [ 5, 5, 90],
-      [ 2, 49, 49],
-    ]
+    set_policy_update_init_cond_to_split_init: [True, False]
     #required for fixed_sizes --> number of steps assigned for each policy, len(ranged) = n_splits (else error)
 
 
