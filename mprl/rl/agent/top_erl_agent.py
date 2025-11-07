@@ -937,6 +937,13 @@ class TopErlAgent(AbstractAgent):
         self.critic.eval()  # disable dropout
         self.critic.requires_grad(False)
 
+        if self.reference_split_args.get("segments_equal_splits", False):
+            n_splits = np.random.randint(1, self.max_paral)
+            pred_mean = pred_mean.repeat([n_splits] + [1] * (len(pred_mean.shape) - 1))
+            pred_L  = pred_L.repeat([n_splits] + [1] * (len(pred_L.shape) - 1))
+            for key in dataset:
+                dataset[key] = dataset[key].repeat([n_splits] + [1] * (len(dataset[key].shape) - 1))
+
         states = dataset["step_states"]
         init_time = dataset["episode_init_time"]
         init_pos = dataset["episode_init_pos"]
@@ -959,10 +966,6 @@ class TopErlAgent(AbstractAgent):
                 idx_in_segments = (
                             dataset["split_start_indexes"][0][:, None] + torch.arange(diff + 1, device=self.device)[
                         None, :])
-                n_splits = np.random.randint(1, self.max_paral)
-                idx_in_segments = util.add_expand_dim(idx_in_segments, [-2], [n_splits])
-                idx_in_segments = idx_in_segments.reshape(
-                    (np.prod(idx_in_segments.shape[:-1]), idx_in_segments.shape[-1]))
             else:
                 split_start_as_ind0 = "enforce_no_overlap" in self.reference_split_args["q_loss_strategy"]
                 if self.reference_split_args.get("policy_use_all_action_indexes", False):
@@ -1023,21 +1026,28 @@ class TopErlAgent(AbstractAgent):
         pos_including_init = torch.cat((init_pos[..., 0:1, :], dataset["step_actions"][..., :7]), dim=-2)
         vel_including_init = torch.cat((init_vel[..., 0:1, :], dataset["step_actions"][..., 7:]), dim=-2)
 
-        if self.reference_split_args.get("set_policy_update_init_cond_to_split_init", False):
+        if self.reference_split_args.get("set_policy_update_init_cond_to_split_init", False) or self.update_policy_based_on_dataset_splits:
             #init condition = init of split (corresponding to policy parameteres)
             ref_split_indx = torch.sum(seg_start_idx[..., None] >= dataset["split_start_indexes"][..., None, :], dim=-1) - 1
-            clipped_indexes = dataset["split_start_indexes"][np.arange(times.size(0))[:, None],  ref_split_indx][..., 0:-1]
+            clipped_indexes = dataset["split_start_indexes"][np.arange(times.size(0))[:, None],  ref_split_indx][..., 1:]
         else:
             # init condition for next segment is last step of prev action
             clipped_indexes = torch.clip(idx_in_segments[..., 0:-1, -1], max=dataset["step_actions"].size(1) - 1)
 
+        policy_shift = self.reference_split_args.get("policy_upd_init_cond_shift", 0)
+        rel_time_shift = self.reference_split_args.get("policy_upd_init_cond_rel_shift_time", 0)
+
+        clipped_indexes = clipped_indexes + policy_shift
+        clipped_indexes_t = torch.clip(clipped_indexes + rel_time_shift, max=dataset["step_actions"].size(1) - 1)
+        clipped_indexes = torch.clip(clipped_indexes, max=dataset["step_actions"].size(1) - 1)
+
         #assign init pos to correct references
         if not self.update_policy_based_on_dataset_splits and not self.reference_split_args.get("set_policy_update_init_cond_to_split_init", False):
-            init_time[..., 1:] = time_including_init[:, clipped_indexes]
+            init_time[..., 1:] = time_including_init[:, clipped_indexes_t]
             init_pos[..., 1:, :] = pos_including_init[:, clipped_indexes]
             init_vel[..., 1:, :] = vel_including_init[:, clipped_indexes]
         else:
-            init_time[..., 1:] = time_including_init[np.arange(times.size(0))[:, None], clipped_indexes]
+            init_time[..., 1:] = time_including_init[np.arange(times.size(0))[:, None], clipped_indexes_t]
             init_pos[..., 1:, :] = pos_including_init[np.arange(times.size(0))[:, None], clipped_indexes]
             init_vel[..., 1:, :] = vel_including_init[np.arange(times.size(0))[:, None], clipped_indexes]
 
