@@ -30,6 +30,8 @@ class TopErlPolicy(BlackBoxPolicy):
                          device,
                          **kwargs)
 
+        self.sequencing_args = kwargs["sequencing_args"]
+        kwargs["mp"]["args"]["tau"] /= self.sequencing_args.get("n_splits", 1) #only required here as in sample its included in split_args
         self.mp: ProDMP = get_mp(**kwargs["mp"])
         # self.mp.show_scaled_basis(True)
         self.num_dof = self.mp.num_dof
@@ -100,7 +102,10 @@ class TopErlPolicy(BlackBoxPolicy):
             sample_func(times=times, re_use_pos_from_prev_distr=False, **iteration_sample_func_kwargs)
 
         # zero out timesteps that should not have been used
-        smp_pos = smp_pos_1.squeeze(2) * mask.unsqueeze(-1)
+        try:
+            smp_pos = smp_pos_1.squeeze(2) * mask.unsqueeze(-1)
+        except:
+            raise Exception
         smp_vel = smp_vel_1.squeeze(2) * mask.unsqueeze(-1)
 
         ####################################################################################################
@@ -209,6 +214,46 @@ class TopErlPolicy(BlackBoxPolicy):
 
         return smp_pos, smp_vel
 
+    def wrap_n_sample_trajectories(self, n_seq, mp_func, ref_time_list=torch.tensor(np.linspace(0,2,101))):
+        '''
+        Args:
+            n_seq: how many different mp initialisations in the sequence
+
+        Returns: pos, vel -> full trajectory created from multitude of mps
+
+        Note: This function always set the initial time for each mp = 0
+        uses splits defined as defined by split_strategies for sampling splits
+        '''
+
+        def n_seq_mp(times=None, params=None, params_L=None,
+                            init_time=None, init_pos=None, init_vel=None,
+                            num_smp=1, flat_shape=False, **kwargs):
+            used_times = times[..., :times.size(-1) // n_seq]
+
+            #each updating segment has at least one mp sequence element
+            for n in range(n_seq):
+                #params_L not present if use_mean (aka test)
+                if params_L is not None:
+                    pos_seg, vel_seg = mp_func(used_times, params, params_L, init_time, init_pos, init_vel, num_smp, flat_shape, **kwargs)
+                else:
+                    pos_seg, vel_seg = mp_func(used_times, params, init_time, init_pos, init_vel, flat_shape, **kwargs)
+                init_pos = pos_seg.squeeze(-3)[..., -1, :]
+                init_vel = vel_seg.squeeze(-3)[..., -1, :]
+
+                if n == 0:
+                    pos_seq = pos_seg * 1 #to copy and not just ref
+                    vel_seq = vel_seg * 1
+                else:
+                    pos_seq = torch.cat((pos_seq, pos_seg), dim=-2)
+                    vel_seq = torch.cat((vel_seq, vel_seg), dim=-2)
+
+                #if equal splits do not fit put the rest in the last one
+                if n == n_seq - 1 and n_seq * (times.size(-1) // n_seq) != times.size(-1):
+                    used_times = times[..., : times.size(-1) - (n_seq-1) * (times.size(-1) // n_seq)]
+
+            return pos_seq, vel_seq
+
+        return n_seq_mp
 
 
     def sample(self, require_grad, params_mean, params_L,
@@ -261,16 +306,21 @@ class TopErlPolicy(BlackBoxPolicy):
         use_case = split_args.get("use_case", "sampler")
         if use_case == "agent":
             split_sample_func = self.sample_splitted_partial_times
-        #elif split_args["split_strategy"] == "n_equal_splits" and  split_args["n_splits"]== 1:
         else:
             split_sample_func = self.sample_once
-        #else:
-        #    split_sample_func = self.sample_splitted
+
+        #sequencing:
+        n_seq = self.sequencing_args.get("n_splits", 1)
+        if n_seq == 1:
+            samp_func = self.mp.sample_trajectories
+        else:
+            ref_time_list = split_args.get("ref_time_list", torch.tensor(np.linspace(0,2,101)))
+            samp_func = self.wrap_n_sample_trajectories(n_seq, self.mp.sample_trajectories, ref_time_list)
 
 
         if not use_mean:
             smp_pos, smp_vel = split_sample_func(times=times,
-                                                    sample_func=self.mp.sample_trajectories,
+                                                    sample_func=samp_func,
                                                     params=params_mean,
                                                     params_L=params_L,
                                                     init_time=init_time,
@@ -311,6 +361,10 @@ class TopErlPolicy(BlackBoxPolicy):
                     self.mp.get_traj_pos(times, params, init_time, init_pos, init_vel, flat_shape), 
                     self.mp.get_traj_vel(times, params, init_time, init_pos, init_vel, flat_shape)
                 ]
+            if n_seq != 1:
+                samp_func = self.wrap_n_sample_trajectories(n_seq, pos_vel_func, ref_time_list)
+            else:
+                samp_func = pos_vel_func
             smp_pos, smp_vel = split_sample_func(times=times,
                                                     sample_func=pos_vel_func,
                                                     params=params_mean,

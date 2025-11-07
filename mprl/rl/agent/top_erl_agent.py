@@ -200,11 +200,12 @@ class TopErlAgent(AbstractAgent):
             split_starts = split_starts[0]
             n_th_split_start = 1
             for idx, idx_val_row in enumerate(idx_in_segments):
+                if n_th_split_start > split_starts.shape[0] - 1:
+                    break
                 if idx_val_row[0] >= split_starts[n_th_split_start]:
                     idx_in_segments[idx:] += split_starts[n_th_split_start] - idx_in_segments[idx, 0]
                     n_th_split_start += 1
-                    if n_th_split_start > split_starts.shape[0] - 1:
-                        break
+
             relevant_idx = 0 if pad_additional else -1
             while idx_in_segments[-1, relevant_idx] >= self.traj_length:
                 idx_in_segments = idx_in_segments[:-1]
@@ -1032,13 +1033,13 @@ class TopErlAgent(AbstractAgent):
 
         #assign init pos to correct references
         if not self.update_policy_based_on_dataset_splits and not self.reference_split_args.get("set_policy_update_init_cond_to_split_init", False):
-            init_time[:, 1:] = time_including_init[:, clipped_indexes]
-            init_pos[:, 1:] = pos_including_init[:, clipped_indexes]
-            init_vel[:, 1:] = vel_including_init[:, clipped_indexes]
+            init_time[..., 1:] = time_including_init[:, clipped_indexes]
+            init_pos[..., 1:, :] = pos_including_init[:, clipped_indexes]
+            init_vel[..., 1:, :] = vel_including_init[:, clipped_indexes]
         else:
-            init_time[:, 1:] = time_including_init[np.arange(times.size(0))[:, None], clipped_indexes]
-            init_pos[:, 1:] = pos_including_init[np.arange(times.size(0))[:, None], clipped_indexes]
-            init_vel[:, 1:] = vel_including_init[np.arange(times.size(0))[:, None], clipped_indexes]
+            init_time[..., 1:] = time_including_init[np.arange(times.size(0))[:, None], clipped_indexes]
+            init_pos[..., 1:, :] = pos_including_init[np.arange(times.size(0))[:, None], clipped_indexes]
+            init_vel[..., 1:, :] = vel_including_init[np.arange(times.size(0))[:, None], clipped_indexes]
 
         # Get the trajectory segments
         # [num_trajs, num_segments, num_seg_actions, num_dof]
