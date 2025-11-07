@@ -45,7 +45,7 @@ params:
 grid:
   reference_split:
     policy_upd_init_cond_shift: [-2, -1, 0, 1, 2]
-    policy_upd_init_cond_rel_shift_time: [-1, -1, 0, 1, 2]
+    policy_upd_init_cond_rel_shift_time: [-2, -1, 0, 1, 2]
 
 
 
