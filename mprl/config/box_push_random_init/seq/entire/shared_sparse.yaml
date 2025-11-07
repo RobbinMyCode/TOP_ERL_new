@@ -1,7 +1,7 @@
 # Global config
 exp_name: &exp_name "box_random_seq_entire"
 exp_path: &exp_path "../../mprl_exp_result"
-sub_exp_name: &sub_exp_name "sparse_n=2_6_updated_init_cond"
+sub_exp_name: &sub_exp_name "sparse_top_ERL"
 act_func_hidden: &act_func_hidden leaky_relu
 act_func_last: &act_func_last null
 dtype: &dtype "float32"
@@ -101,7 +101,7 @@ params:
     split_strategy: "n_equal_splits" #n_equal_splits, random_size_range, random_gauss, fixed_sizes, fixed_size_rand_start, intra_episode_fixed_inter_rand_size  _rand_semi_fixed_size_focus_on_region
     random_permute_splits: False #e.g. ranges = [12,15,36,0] -> permute that list every iteration before assignment, usable for ALL split_strategies
 
-    n_splits: 3        #MOST IMPORTANT (for n_equal_splits): defines how many policy splits will be allowed, for rand variants defines how many splits will be saved (must be large enough to fit all splits, but should not be too large due to speed)
+    n_splits: 1        #MOST IMPORTANT (for n_equal_splits): defines how many policy splits will be allowed, for rand variants defines how many splits will be saved (must be large enough to fit all splits, but should not be too large due to speed)
                         #also required for split_strategy "n_equal_splits"
     ranges: [50, 35, 10, 5] #required for fixed_sizes --> number of steps assigned for each policy, len(ranged) = n_splits (else error)
     size_range: [15,30]  #required for split_strategy "random_size_range" -> random_size_range takes the splits from the sampler and so from the replay buffer
@@ -126,7 +126,7 @@ params:
     size_exception_for_first_and_last_split: True #only for size_range -> default true so that v + q func will be computed at all timesteps
     mean_std: [10,5]    #required for split_strategy "random_gauss"
 
-    q_loss_strategy: "enforce_no_overlap_overconf_include_0" #"truncated" #q-loss is updated via time-slices --> this determines how the time-sliced get cut for the update
+    q_loss_strategy: "overconfident" #"truncated" #q-loss is updated via time-slices --> this determines how the time-sliced get cut for the update
                                  #"truncated" --> one slice only for one parameter segment -> cut off parts that are not created with the same policy parameters
                                  #"start_unchanged" --> each slice has a startpoint from sampling saved in the replay buffer, with this sampling method
                                                       # bigger gaps between two consecutive segments which use different parameters may occur, but the policies start with "known startpoints"
