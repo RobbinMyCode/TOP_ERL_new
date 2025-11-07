@@ -44,7 +44,7 @@ params:
 
 grid:
   reference_split:
-    use_top_erl_splits_critic: [True, False]
+    use_top_erl_splits_policy: True
     set_policy_update_init_cond_to_split_init: [True, False]
     evaluate_on_equal_splits: [True, False]
 
