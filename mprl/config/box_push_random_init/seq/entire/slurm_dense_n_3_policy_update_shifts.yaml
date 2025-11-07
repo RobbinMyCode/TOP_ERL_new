@@ -17,7 +17,7 @@ experiment_copy_src:
 experiment_copy_auto_dst: "../../CODE_COPY/"
 ---
 name: box_random_seq_entire
-import_path: "./shared_dense_n_2_4_rerun_policy_upd_vars.yaml"
+import_path: "./shared_dense_n_3_policy_update_shifts.yaml"
 import_exp: "box_random_seq_entire"
 
 
