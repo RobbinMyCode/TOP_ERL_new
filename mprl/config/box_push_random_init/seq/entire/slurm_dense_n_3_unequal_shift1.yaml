@@ -1,0 +1,100 @@
+---
+name: "SLURM"
+partition: "accelerated"
+job-name: "box_random_seq_entire_rand_fixed"
+num_parallel_jobs: 120
+ntasks: 1
+cpus-per-task: 152
+time: 2500 #600 for 10 hours
+gpus_per_rep: 1
+scheduler: horeka
+sbatch_args:
+  gres: "gpu:4"
+
+
+experiment_copy_src:
+  - "../" # RL Code base
+experiment_copy_auto_dst: "../../CODE_COPY/"
+---
+name: box_random_seq_entire
+import_path: "./shared_dense_3_shift_1_unequal.yaml"
+import_exp: "box_random_seq_entire"
+
+
+
+
+# cw2 config
+repetitions: 3      # Number of repetitions, each with different random seed, 2 [for hyper paremtertuning 2] or 4 for test, 20 for paper
+reps_per_job: 4     # job id assigment
+reps_in_parallel: 4 #jobs run in parallel = # of gpus used
+iterations: &iterations 35000
+num_checkpoints: 1
+
+# Hardware specific parameters
+params:
+  sampler:
+    args:
+      num_env_train: 4
+      num_env_test: 38
+      episodes_per_train_env: 1
+      episodes_per_test_env: 4
+  projection:
+    args:
+      total_train_steps: *iterations
+
+list:
+  reference_split:
+    ranges: [
+      [35, 30, 35],
+      [40, 20, 40],
+      [40, 25, 35],
+      [40, 30, 30],
+      [45, 10, 45],
+      [45, 15, 40],
+      [45, 20, 35],
+      [45, 25, 30],
+      [50, 10, 40],
+      [50, 15, 35],
+      [50, 20, 30],
+      [50, 25, 25],
+      [55, 10, 35],
+      [55, 15, 30],
+      [55, 20, 25],
+      [60, 10, 30],
+      [60, 15, 25],
+      [60, 20, 20],
+      [65, 10, 25],
+      [65, 15, 20],
+      [70, 10, 20],
+      [70, 15, 15]
+      ]
+    ranges_str: [
+      "[35, 30, 35]",
+      "[40, 20, 40]",
+      "[40, 25, 35]",
+      "[40, 30, 30]",
+      "[45, 10, 45]",
+      "[45, 15, 40]",
+      "[45, 20, 35]",
+      "[45, 25, 30]",
+      "[50, 10, 40]",
+      "[50, 15, 35]",
+      "[50, 20, 30]",
+      "[50, 25, 25]",
+      "[55, 10, 35]",
+      "[55, 15, 30]",
+      "[55, 20, 25]",
+      "[60, 10, 30]",
+      "[60, 15, 25]",
+      "[60, 20, 20]",
+      "[65, 10, 25]",
+      "[65, 15, 20]",
+      "[70, 10, 20]",
+      "[70, 15, 15]"
+      ]
+    #required for fixed_sizes --> number of steps assigned for each policy, len(ranged) = n_splits (else error)
+
+
+
+
+
