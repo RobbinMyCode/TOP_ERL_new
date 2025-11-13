@@ -1,0 +1,90 @@
+---
+name: "SLURM"
+partition: "accelerated"
+job-name: "box_random_seq_entire_rand_fixed"
+num_parallel_jobs: 120
+ntasks: 1
+cpus-per-task: 152
+time: 2500 #600 for 10 hours
+gpus_per_rep: 1
+scheduler: horeka
+sbatch_args:
+  gres: "gpu:4"
+
+
+experiment_copy_src:
+  - "../" # RL Code base
+experiment_copy_auto_dst: "../../CODE_COPY/"
+---
+name: box_random_seq_entire
+import_path: "./shared_dense_4_shift_1_unequal.yaml"
+import_exp: "box_random_seq_entire"
+
+
+
+
+# cw2 config
+repetitions: 2      # Number of repetitions, each with different random seed, 2 [for hyper paremtertuning 2] or 4 for test, 20 for paper
+reps_per_job: 4     # job id assigment
+reps_in_parallel: 4 #jobs run in parallel = # of gpus used
+iterations: &iterations 35000
+num_checkpoints: 1
+
+# Hardware specific parameters
+params:
+  sampler:
+    args:
+      num_env_train: 4
+      num_env_test: 38
+      episodes_per_train_env: 1
+      episodes_per_test_env: 4
+  projection:
+    args:
+      total_train_steps: *iterations
+
+list:
+  reference_split:
+    ranges: [
+      [20, 25, 30, 25],
+      [20, 25, 25, 30],
+      [25, 25, 25, 25],
+      [25, 20, 30, 25],
+      [25, 20, 25, 30],
+      [25, 25, 20, 30],
+      [30, 20, 25, 25],
+      [30, 25, 20, 25],
+      [30, 25, 25, 20],
+      [35, 25, 20, 20],
+      [35, 20, 25, 20],
+      [35, 20, 20, 25],
+      [35, 15, 15, 35],
+      [40, 20, 20, 20],
+      [40, 15, 20, 25],
+      [40, 15, 25, 20],
+      [40, 20, 15, 25],
+      [40, 20, 25, 15],
+      [40, 25, 20, 15],
+      [40, 25, 15, 20],
+      [40, 15, 15, 30],
+      [40, 30, 15, 15],
+      [40, 15, 30, 15],
+      [40, 10, 10, 40],
+      [40, 40, 10, 10],
+      [40, 10, 40, 10],
+      [45, 15, 15, 20],
+      [45, 15, 20, 15],
+      [45, 20, 15, 15],
+      [45, 25, 10, 15],
+      [45, 25, 15, 10],
+      [45, 15, 10, 25],
+      [45, 15, 25, 10],
+      [45, 10, 25, 15],
+      [45, 10, 10, 35],
+      [45, 10, 35, 10],
+      [50, 15, 15, 20],
+      [50, 15, 20, 15],
+      [50, 10, 10, 30],
+      [50, 10, 30, 10],
+      [55, 10, 25, 10],
+      [55, 10, 10, 25],
+      ]
