@@ -71,7 +71,7 @@ grid:
 #          "metaworld_ProDMP_TCE/door-lock-v2",
 #          "metaworld_ProDMP_TCE/door-open-v2",
 #          "metaworld_ProDMP_TCE/door-unlock-v2",
-          "metaworld_ProDMP_TCE/hand-insert-v2",
+          "metaworld_ProDMP_TCE/hand-insert-v2"
 #          "metaworld_ProDMP_TCE/drawer-close-v2",
 #          "metaworld_ProDMP_TCE/drawer-open-v2",
 #          "metaworld_ProDMP_TCE/faucet-open-v2",
