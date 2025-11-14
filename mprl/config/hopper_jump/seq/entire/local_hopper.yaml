@@ -20,3 +20,11 @@ params:
   projection:
     args:
       total_train_steps: *iterations
+
+  reference_split:
+    split_strategy: "fixed_sizes" #n_equal_splits, random_size_range, random_gauss, fixed_sizes, fixed_size_rand_start, intra_episode_fixed_inter_rand_size  _rand_semi_fixed_size_focus_on_region
+    random_permute_splits: False #e.g. ranges = [12,15,36,0] -> permute that list every iteration before assignment, usable for ALL split_strategies
+
+    n_splits: 3        #MOST IMPORTANT (for n_equal_splits): defines how many policy splits will be allowed, for rand variants defines how many splits will be saved (must be large enough to fit all splits, but should not be too large due to speed)
+    #also required for split_strategy "n_equal_splits"
+    ranges: [ 125, 75, 50 ]

@@ -99,7 +99,7 @@ params:
         #as_zero: every split will start at time index 0 --> each split starts at the current starting position [all steps after total step size get cut out]
           #-> goal parameter loses direct meaning as goal is not reachable in the used step size but would need last interval start+total_steps
 
-    split_strategy: "fixed_sizes" #n_equal_splits, random_size_range, random_gauss, fixed_sizes, fixed_size_rand_start, intra_episode_fixed_inter_rand_size  _rand_semi_fixed_size_focus_on_region
+    split_strategy: "n_equal_splits" #n_equal_splits, random_size_range, random_gauss, fixed_sizes, fixed_size_rand_start, intra_episode_fixed_inter_rand_size  _rand_semi_fixed_size_focus_on_region
     random_permute_splits: False #e.g. ranges = [12,15,36,0] -> permute that list every iteration before assignment, usable for ALL split_strategies
 
     n_splits: 2        #MOST IMPORTANT (for n_equal_splits): defines how many policy splits will be allowed, for rand variants defines how many splits will be saved (must be large enough to fit all splits, but should not be too large due to speed)
@@ -127,13 +127,13 @@ params:
     size_exception_for_first_and_last_split: True #only for size_range -> default true so that v + q func will be computed at all timesteps
     mean_std: [10,5]    #required for split_strategy "random_gauss"
 
-    q_loss_strategy: "overconfident" #"truncated" #q-loss is updated via time-slices --> this determines how the time-sliced get cut for the update
+    q_loss_strategy: "continuing" #"truncated" #q-loss is updated via time-slices --> this determines how the time-sliced get cut for the update
                                  #"truncated" --> one slice only for one parameter segment -> cut off parts that are not created with the same policy parameters
                                  #"start_unchanged" --> each slice has a startpoint from sampling saved in the replay buffer, with this sampling method
                                                       # bigger gaps between two consecutive segments which use different parameters may occur, but the policies start with "known startpoints"
                                  #"continuing" --> take last reached point of previous policy as init point for next segment (parameters are set to fit a different point then)-> may also cause issues
                                 #enforce_no_overlap_overconf_include_0 -> enforces splits with include_0 also always updates first segment with 0 (before rand start)
-    v_func_estimation: "overconfident" #"overconfident" #truncated, continuing or "overconfident"
+    v_func_estimation: "continuing" #"overconfident" #truncated, continuing or "overconfident"
                                   #overconfident: policy which is responsible for init time predicts entire sequence for v-func estimation
 
 

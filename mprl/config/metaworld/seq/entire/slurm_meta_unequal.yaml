@@ -37,10 +37,12 @@ params:
       num_env_test: 38
       episodes_per_train_env: 1
       episodes_per_test_env: 4
+  reference_split:
+    n_splits: 3
 
 grid:
   reference_split:
-    n_splits: [2, 3, 4]
+    ranges: [[ 250, 150, 100 ]]
   sampler:
     args:
       env_id:
@@ -64,7 +66,7 @@ grid:
 #          "metaworld_ProDMP_TCE/coffee-pull-v2",
 #          "metaworld_ProDMP_TCE/coffee-push-v2",
 #          "metaworld_ProDMP_TCE/dial-turn-v2",
-          "metaworld_ProDMP_TCE/disassemble-v2"
+          "metaworld_ProDMP_TCE/disassemble-v2",
 #          "metaworld_ProDMP_TCE/door-close-v2",
 #          "metaworld_ProDMP_TCE/door-lock-v2",
 #          "metaworld_ProDMP_TCE/door-open-v2",

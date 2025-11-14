@@ -37,7 +37,9 @@ params:
   projection:
     args:
       total_train_steps: *iterations
+  reference_split:
+    n_splits: 3
 
 grid:
   reference_split:
-    n_splits: [2, 3, 4]
+    ranges: [ [ 125, 75, 50 ] ]
