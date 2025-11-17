@@ -40,7 +40,7 @@ params:
 
 grid:
   reference_split:
-    n_splits: [2, 3, 4]
+    n_splits: [2, 3, 4, 5, 6]
   sampler:
     args:
       env_id:
