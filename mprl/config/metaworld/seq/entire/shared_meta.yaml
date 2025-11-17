@@ -145,7 +145,7 @@ params:
     segments_equal_splits: False #update on non-random segments but ones that just equal the (policy-)splits
 
     policy_upd_init_cond_shift: 0
-    policy_upd_init_cond_rel_shift_time: 0
+    policy_upd_init_cond_rel_shift_time: 1
 
   critic:
     type: TopErlCritic
