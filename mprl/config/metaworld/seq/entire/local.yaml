@@ -13,8 +13,8 @@ num_checkpoints: 1
 params:
   sampler:
     args:
-      num_env_train: 2
-      num_env_test: 4
+      num_env_train: 1
+      num_env_test: 1
       episodes_per_train_env: 1
       episodes_per_test_env: 4
       env_id: "metaworld_ProDMP_TCE/assembly-v2"

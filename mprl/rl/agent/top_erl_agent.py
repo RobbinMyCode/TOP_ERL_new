@@ -1023,8 +1023,9 @@ class TopErlAgent(AbstractAgent):
 
         #reference times/pos/vel including the initial positions so it can be used correctly
         time_including_init = torch.cat((init_time[..., 0:1], times), dim=-1)
-        pos_including_init = torch.cat((init_pos[..., 0:1, :], dataset["step_actions"][..., :7]), dim=-2)
-        vel_including_init = torch.cat((init_vel[..., 0:1, :], dataset["step_actions"][..., 7:]), dim=-2)
+        n_dim =  dataset["step_actions"].size(-1) // 2
+        pos_including_init = torch.cat((init_pos[..., 0:1, :], dataset["step_actions"][..., :n_dim]), dim=-2)
+        vel_including_init = torch.cat((init_vel[..., 0:1, :], dataset["step_actions"][..., n_dim:]), dim=-2)
 
         if self.reference_split_args.get("set_policy_update_init_cond_to_split_init", False) or self.update_policy_based_on_dataset_splits:
             #init condition = init of split (corresponding to policy parameteres)
