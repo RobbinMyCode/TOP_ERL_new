@@ -1043,14 +1043,16 @@ class TopErlAgent(AbstractAgent):
         clipped_indexes = torch.clip(clipped_indexes, max=dataset["step_actions"].size(1) - 1)
 
         #assign init pos to correct references
-        if not self.update_policy_based_on_dataset_splits and not self.reference_split_args.get("set_policy_update_init_cond_to_split_init", False):
-            init_time[..., 1:] = time_including_init[:, clipped_indexes_t]
-            init_pos[..., 1:, :] = pos_including_init[:, clipped_indexes]
-            init_vel[..., 1:, :] = vel_including_init[:, clipped_indexes]
-        else:
-            init_time[..., 1:] = time_including_init[np.arange(times.size(0))[:, None], clipped_indexes_t]
-            init_pos[..., 1:, :] = pos_including_init[np.arange(times.size(0))[:, None], clipped_indexes]
-            init_vel[..., 1:, :] = vel_including_init[np.arange(times.size(0))[:, None], clipped_indexes]
+        use_init_cond_0_for_all = self.reference_split_args.get("all_policy_updates_init_cond_identical", False)
+        if not use_init_cond_0_for_all:
+            if not self.update_policy_based_on_dataset_splits and not self.reference_split_args.get("set_policy_update_init_cond_to_split_init", False):
+                init_time[..., 1:] = time_including_init[:, clipped_indexes_t]
+                init_pos[..., 1:, :] = pos_including_init[:, clipped_indexes]
+                init_vel[..., 1:, :] = vel_including_init[:, clipped_indexes]
+            else:
+                init_time[..., 1:] = time_including_init[np.arange(times.size(0))[:, None], clipped_indexes_t]
+                init_pos[..., 1:, :] = pos_including_init[np.arange(times.size(0))[:, None], clipped_indexes]
+                init_vel[..., 1:, :] = vel_including_init[np.arange(times.size(0))[:, None], clipped_indexes]
 
         # Get the trajectory segments
         # [num_trajs, num_segments, num_seg_actions, num_dof]

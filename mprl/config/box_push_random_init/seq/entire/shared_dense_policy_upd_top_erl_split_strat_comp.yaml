@@ -1,7 +1,7 @@
 # Global config
 exp_name: &exp_name "box_random_seq_entire"
 exp_path: &exp_path "../../mprl_exp_result"
-sub_exp_name: &sub_exp_name "test"
+sub_exp_name: &sub_exp_name "n=3_top-erl_policy_upd_init_SPLIT_STRAT_comparison"
 act_func_hidden: &act_func_hidden leaky_relu
 act_func_last: &act_func_last null
 dtype: &dtype "float32"
@@ -44,8 +44,8 @@ params:
       use_old_policy: true  #can also be tried as false (but late) use a target policy as the old policy for the trust region projection
       old_policy_update_rate: 0.005  # update rate for the old policy from the current policy
       batch_size: 512
-      critic_update_from: 1 #1 # 300
-      policy_update_from: 2 #150 # 2000
+      critic_update_from: 300 #1 # 300
+      policy_update_from: 2000 #150 # 2000
       dtype: *dtype
       device: *device
 
@@ -102,7 +102,7 @@ params:
     split_strategy: "n_equal_splits" #n_equal_splits, random_size_range, random_gauss, fixed_sizes, fixed_size_rand_start, intra_episode_fixed_inter_rand_size  _rand_semi_fixed_size_focus_on_region
     random_permute_splits: False #e.g. ranges = [12,15,36,0] -> permute that list every iteration before assignment, usable for ALL split_strategies
 
-    n_splits: 2        #MOST IMPORTANT (for n_equal_splits): defines how many policy splits will be allowed, for rand variants defines how many splits will be saved (must be large enough to fit all splits, but should not be too large due to speed)
+    n_splits: 3        #MOST IMPORTANT (for n_equal_splits): defines how many policy splits will be allowed, for rand variants defines how many splits will be saved (must be large enough to fit all splits, but should not be too large due to speed)
                         #also required for split_strategy "n_equal_splits"
     ranges: [60, 40] #required for fixed_sizes --> number of steps assigned for each policy, len(ranged) = n_splits (else error)
     size_range: [15,30]  #required for split_strategy "random_size_range" -> random_size_range takes the splits from the sampler and so from the replay buffer
@@ -142,7 +142,7 @@ params:
     evaluate_on_equal_splits: False #if True --> all evaluations are done with the corresponding n_equal_splits n_splits
 
     include_time_in_states: True #default True -> else get rid of all time infos instates
-    all_policy_updates_init_cond_identical: False #exists to do default top-erl init cond ignoring splits
+    all_policy_updates_init_cond_identical: True #exists to do default top-erl init cond ignoring splits
     set_policy_update_init_cond_to_split_init: False #init conditions get mapped to last param initialization position -> true
     segments_equal_splits: False #update on non-random segments but ones that just equal the (policy-)splits
 
