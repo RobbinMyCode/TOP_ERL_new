@@ -17,7 +17,7 @@ params:
       num_env_test: 1
       episodes_per_train_env: 1
       episodes_per_test_env: 4
-      env_id: "metaworld_ProDMP_TCE/assembly-v2"
+      env_id: "metaworld_ProDMP_TCE/pick-out-of-hole-v2"
   projection:
     args:
       total_train_steps: *iterations

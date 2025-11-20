@@ -21,6 +21,17 @@ class MPExperiment(experiment.AbstractIterativeExperiment):
 
         # Get experiment config
         cfg = cw_config["params"]
+        if cfg["reference_split"] == {}:
+            cfg["reference_split"] = {"split_strategy": "n_equal_splits", "n_splits": 1}
+        cfg["sampler"]["args"]["reference_split"] = cfg["reference_split"]
+        cfg["agent"]["args"]["reference_split"] = cfg["reference_split"]
+        cfg["critic"]["args"]["reference_split"] = cfg["reference_split"]
+        cfg["policy"]["args"]["sequencing_args"] = cfg["reference_split"].get("sequencing_args", {})
+
+        cfg["policy"]["include_pos_in_forcing_terms"] = cfg["policy"].get("include_pos_in_forcing_terms", False)
+        cfg["sampler"]["args"]["include_pos_in_forcing_terms"] = cfg["policy"].get("include_pos_in_forcing_terms", False)
+
+
         cpu_cores = cw_config.get("cpu_cores", None)
         if cpu_cores is None:
             cpu_cores = set(range(psutil.cpu_count(logical=True)))
@@ -55,14 +66,19 @@ class MPExperiment(experiment.AbstractIterativeExperiment):
 
         state_dim = self.get_dim_in(cfg, self.sampler)
         policy_out_dim = self.dim_policy_out(cfg)
+
+        num_dof = cfg["mp"]["args"]["num_dof"]
+        action_dim = num_dof * 2
+
         self.policy = policy_factory(cfg["policy"]["type"],
-                                     dim_in=state_dim,
+                                     dim_in=state_dim if not cfg["policy"][
+                                         "include_pos_in_forcing_terms"] else state_dim + num_dof,
                                      dim_out=policy_out_dim,
                                      **cfg["policy"]["args"])
-        action_dim = self.policy.num_dof * 2
 
         self.critic = critic_factory(cfg["critic"]["type"],
-                                     state_dim=state_dim,
+                                     state_dim=state_dim if not cfg["policy"][
+                                         "include_pos_in_forcing_terms"] else state_dim + num_dof,
                                      action_dim=action_dim,
                                      **cfg["critic"]["args"])
         self.projection = projection_factory(cfg["projection"]["type"],
@@ -73,7 +89,9 @@ class MPExperiment(experiment.AbstractIterativeExperiment):
         traj_length = self.sampler.num_times
 
         replay_buffer_data_shape = {
-            "step_states": (traj_length, state_dim),
+            "step_states": (traj_length, state_dim) if not cfg["policy"].get("include_pos_in_forcing_terms",
+                                                                             False) else (traj_length,
+                                                                                          state_dim + num_dof),
             "step_desired_pos": (traj_length, self.policy.num_dof),
             "step_desired_vel": (traj_length, self.policy.num_dof),
             "step_actions": (traj_length, action_dim),
@@ -81,11 +99,16 @@ class MPExperiment(experiment.AbstractIterativeExperiment):
             "step_dones": (traj_length,),
             "episode_init_idx": (),
             "episode_init_time": (),
+            "split_start_indexes": (cfg["reference_split"]["n_splits"],),
             "episode_init_pos": (self.policy.num_dof,),
             "episode_init_vel": (self.policy.num_dof,),
-            "episode_params_mean": (policy_out_dim,),
-            "episode_params_L": (policy_out_dim, policy_out_dim),
+            "segment_wise_init_pos": (cfg["reference_split"]["n_splits"], self.policy.num_dof,),
+            "segment_wise_init_vel": (cfg["reference_split"]["n_splits"], self.policy.num_dof,),
+            "episode_params_mean": (cfg["reference_split"]["n_splits"], policy_out_dim,),
+            "episode_params_L": (cfg["reference_split"]["n_splits"], policy_out_dim, policy_out_dim),
         }
+        if cfg["reference_split"].get("re_use_rand_coord_from_sampler_for_updates", False):
+            replay_buffer_data_shape["mp_distr_rel_pos"] = (1, policy_out_dim)
 
         self.replay_buffer = replay_buffer_factory(
             cfg["replay_buffer"]["type"],

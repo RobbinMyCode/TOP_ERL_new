@@ -130,7 +130,7 @@ class TopErlAgent(AbstractAgent):
             # Generate statistics for environment rollouts
             dataset_stats = \
                 util.generate_many_stats(dataset, "exploration", to_np=True,
-                                         exception_keys=["episode_init_idx"])
+                                         exception_keys=["episode_init_idx", "split_start_indexes"])
 
             # Prepare result metrics
             result_metrics = {
@@ -148,7 +148,7 @@ class TopErlAgent(AbstractAgent):
             # Evaluate agent
             evaluate_metrics = util.generate_many_stats(
                 self.evaluate()[0], "evaluation", to_np=True,
-                exception_keys=["episode_init_idx"])
+                exception_keys=["episode_init_idx", "split_start_indexes"])
             result_metrics.update(evaluate_metrics),
         else:
             result_metrics = {}

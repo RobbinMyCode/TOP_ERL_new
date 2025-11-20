@@ -17,7 +17,7 @@ verbose_level: 1
 wandb:
   project: *exp_name
   group: *sub_exp_name
-  entity: YOU_USER_NAME
+  entity: uiery
   log_interval: &log_interval 100
   log_model: true
   model_name: model
@@ -44,7 +44,7 @@ params:
       use_old_policy: true  # use a target policy as the old policy for the trust region projection
       old_policy_update_rate: 0.005  # update rate for the old policy from the current policy
       batch_size: 256
-      critic_update_from: 1
+      critic_update_from: 2
       policy_update_from: 200
       dtype: *dtype
       device: *device
