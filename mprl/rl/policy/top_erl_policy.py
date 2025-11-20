@@ -102,10 +102,7 @@ class TopErlPolicy(BlackBoxPolicy):
             sample_func(times=times, re_use_pos_from_prev_distr=False, **iteration_sample_func_kwargs)
 
         # zero out timesteps that should not have been used
-        try:
-            smp_pos = smp_pos_1.squeeze(2) * mask.unsqueeze(-1)
-        except:
-            raise Exception
+        smp_pos = smp_pos_1.squeeze(2) * mask.unsqueeze(-1)
         smp_vel = smp_vel_1.squeeze(2) * mask.unsqueeze(-1)
 
         ####################################################################################################
