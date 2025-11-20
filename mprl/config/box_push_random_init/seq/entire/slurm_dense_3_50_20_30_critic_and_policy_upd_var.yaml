@@ -17,7 +17,7 @@ experiment_copy_src:
 experiment_copy_auto_dst: "../../CODE_COPY/"
 ---
 name: box_random_seq_entire
-import_path: "./shared_dense_3_50_20_30_critic_upd_var.yaml"
+import_path: "./shared_dense_3_50_20_30_critic_and_pol_upd_var.yaml"
 import_exp: "box_random_seq_entire"
 
 
@@ -44,8 +44,8 @@ params:
 
 grid:
   reference_split:
+    q_loss_estimation: ["start_unchanged", "continuing", "overconfident"] #"overconfident" #truncated, continuing or "overconfident"
     v_func_estimation: ["start_unchanged", "continuing", "overconfident"] #"overconfident" #truncated, continuing or "overconfident"
-
 
 
 
