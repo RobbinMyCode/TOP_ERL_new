@@ -405,7 +405,7 @@ class TopErlPolicy(BlackBoxPolicy):
         if relative_goal:
             # [*add_dim, num_segments, num_dof]
             delta_relative_goal \
-                = segments_init_pos - traj_init_pos[..., None, :]
+                = (segments_init_pos - traj_init_pos[..., None, :])[..., None, :]
             num_basis_g = self.mp.num_basis_g
 
             # As, abs_goal = rel_goal + traj_init_pos

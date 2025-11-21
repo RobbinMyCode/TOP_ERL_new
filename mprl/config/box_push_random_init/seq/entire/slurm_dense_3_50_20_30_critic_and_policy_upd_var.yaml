@@ -44,7 +44,7 @@ params:
 
 grid:
   reference_split:
-    q_loss_estimation: ["start_unchanged", "continuing", "overconfident"] #"overconfident" #truncated, continuing or "overconfident"
+    q_loss_strategy: ["start_unchanged", "continuing"] #"overconfident" #truncated, continuing or "overconfident"
     v_func_estimation: ["start_unchanged", "continuing", "overconfident"] #"overconfident" #truncated, continuing or "overconfident"
 
 
