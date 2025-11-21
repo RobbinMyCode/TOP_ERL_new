@@ -1,7 +1,7 @@
 # Global config
 exp_name: &exp_name "metaworld_seq_entire"
 exp_path: &exp_path "../../mprl_exp_result"
-sub_exp_name: &sub_exp_name "Metaworld final"
+sub_exp_name: &sub_exp_name "Metaworld top_erl"
 act_func_hidden: &act_func_hidden leaky_relu
 act_func_last: &act_func_last null
 dtype: &dtype "float32"
