@@ -16,7 +16,7 @@ experiment_copy_src:
 experiment_copy_auto_dst: "../../CODE_COPY/"
 ---
 name: hopper_seq_entire
-import_path: "./shared_hopper.yaml"
+import_path: "./shared_hopper_top_erl.yaml"
 import_exp: "hopper_seq_entire"
 
 # cw2 config
@@ -37,10 +37,4 @@ params:
   projection:
     args:
       total_train_steps: *iterations
-  reference_split:
-    n_splits: 3
-    split_strategy: "fixed_sizes"
 
-grid:
-  reference_split:
-    ranges: [ [ 125, 75, 50 ] ]

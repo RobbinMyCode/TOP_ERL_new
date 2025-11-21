@@ -101,7 +101,7 @@ params:
     split_strategy: "n_equal_splits" #n_equal_splits, random_size_range, random_gauss, fixed_sizes, fixed_size_rand_start, intra_episode_fixed_inter_rand_size  _rand_semi_fixed_size_focus_on_region
     random_permute_splits: False #e.g. ranges = [12,15,36,0] -> permute that list every iteration before assignment, usable for ALL split_strategies
 
-    n_splits: 3        #MOST IMPORTANT (for n_equal_splits): defines how many policy splits will be allowed, for rand variants defines how many splits will be saved (must be large enough to fit all splits, but should not be too large due to speed)
+    n_splits: 1        #MOST IMPORTANT (for n_equal_splits): defines how many policy splits will be allowed, for rand variants defines how many splits will be saved (must be large enough to fit all splits, but should not be too large due to speed)
     #also required for split_strategy "n_equal_splits"
     ranges: [ 60, 40 ] #required for fixed_sizes --> number of steps assigned for each policy, len(ranged) = n_splits (else error)
     size_range: [ 15,30 ]  #required for split_strategy "random_size_range" -> random_size_range takes the splits from the sampler and so from the replay buffer
@@ -141,6 +141,7 @@ params:
     evaluate_on_equal_splits: False #if True --> all evaluations are done with the corresponding n_equal_splits n_splits
 
     include_time_in_states: True #default True -> else get rid of all time infos instates
+    all_policy_updates_init_cond_identical: True
     set_policy_update_init_cond_to_split_init: False #init conditions get mapped to last param initialization position -> true
     segments_equal_splits: False #update on non-random segments but ones that just equal the (policy-)splits
 

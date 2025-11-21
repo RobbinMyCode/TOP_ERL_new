@@ -1,7 +1,7 @@
 # Global config
-exp_name: &exp_name "metaworld_seq_entire"
+exp_name: &exp_name "hopper_seq_entire"
 exp_path: &exp_path "../../mprl_exp_result"
-sub_exp_name: &sub_exp_name "Metaworld final"
+sub_exp_name: &sub_exp_name "Hopper TOP_ERL"
 act_func_hidden: &act_func_hidden leaky_relu
 act_func_last: &act_func_last null
 dtype: &dtype "float32"
@@ -11,7 +11,7 @@ seed: auto
 # cw2 config
 name: *exp_name
 path: *exp_path
-verbose_level: 1
+verbose_level: 2
 
 # wandb
 wandb:
@@ -28,43 +28,42 @@ params:
     type: TopErlAgentMultiProcessing
     # type: TopErlAgent
     args:
-      lr_policy: 1e-3
-      lr_critic: 5e-5
-      wd_policy: 1e-5
-      wd_critic: 1e-5
+      lr_policy: 1e-4
+      lr_critic: 1e-4
+      wd_policy: 5e-5
+      wd_critic: 5e-5
       use_mix_precision: true
       schedule_lr_policy: false
       schedule_lr_critic: false
       entropy_penalty_coef: 0.0
       discount_factor: 1
-      epochs_policy: 15
-      epochs_critic: 50
+      epochs_policy: 10
+      epochs_critic: 20
       balance_check: *log_interval
       evaluation_interval: *log_interval
       use_old_policy: true  # use a target policy as the old policy for the trust region projection
       old_policy_update_rate: 0.005  # update rate for the old policy from the current policy
       batch_size: 256
-      critic_update_from: 2
-      policy_update_from: 200
+      critic_update_from: 1
+      policy_update_from: 250
       dtype: *dtype
       device: *device
 
   mp: &mp
     type: prodmp
     args:
-      num_dof: 4
-      tau: 5
+      num_dof: 3
+      tau: 0.8
       alpha_phase: 3
-      num_basis: 8
-      basis_bandwidth_factor: 5
+      num_basis: 3
+      basis_bandwidth_factor: 3
       num_basis_outside: 0
       alpha: 10
-      disable_goal: false
-      relative_goal: true
+      dt: &dt 0.008
       auto_scale_basis: true
-      weights_scale: 0.1
-      goal_scale: 0.1
-      dt: 0.0125
+      relative_goal: false
+      weights_scale: 1
+      goal_scale: 1
       dtype: *dtype
       device: *device
 
@@ -80,7 +79,7 @@ params:
         contextual: false
       init_method: orthogonal
       out_layer_gain: 0.01
-      min_std: 1e-5
+      min_std: 1e-4
       act_func_hidden: *act_func_hidden
       act_func_last: *act_func_last
       dtype: *dtype
@@ -101,7 +100,7 @@ params:
     split_strategy: "n_equal_splits" #n_equal_splits, random_size_range, random_gauss, fixed_sizes, fixed_size_rand_start, intra_episode_fixed_inter_rand_size  _rand_semi_fixed_size_focus_on_region
     random_permute_splits: False #e.g. ranges = [12,15,36,0] -> permute that list every iteration before assignment, usable for ALL split_strategies
 
-    n_splits: 3        #MOST IMPORTANT (for n_equal_splits): defines how many policy splits will be allowed, for rand variants defines how many splits will be saved (must be large enough to fit all splits, but should not be too large due to speed)
+    n_splits: 1        #MOST IMPORTANT (for n_equal_splits): defines how many policy splits will be allowed, for rand variants defines how many splits will be saved (must be large enough to fit all splits, but should not be too large due to speed)
     #also required for split_strategy "n_equal_splits"
     ranges: [ 60, 40 ] #required for fixed_sizes --> number of steps assigned for each policy, len(ranged) = n_splits (else error)
     size_range: [ 15,30 ]  #required for split_strategy "random_size_range" -> random_size_range takes the splits from the sampler and so from the replay buffer
@@ -141,6 +140,7 @@ params:
     evaluate_on_equal_splits: False #if True --> all evaluations are done with the corresponding n_equal_splits n_splits
 
     include_time_in_states: True #default True -> else get rid of all time infos instates
+    all_policy_updates_init_cond_identical: True
     set_policy_update_init_cond_to_split_init: False #init conditions get mapped to last param initialization position -> true
     segments_equal_splits: False #update on non-random segments but ones that just equal the (policy-)splits
 
@@ -167,11 +167,11 @@ params:
     type: KLProjectionLayer  # KL-projection
     args:
       proj_type: kl
-      mean_bound: 0.005
-      cov_bound: 0.0005
+      mean_bound: 0.1
+      cov_bound: 0.02
       trust_region_coeff: 1.0
       scale_prec: true
-      entropy_schedule: null  # Desired value is linear or exp or None
+      entropy_schedule: false  # Desired value is linear or exp or None
       target_entropy: 0.0 # target entropy per action dim
       temperature: 0.7
       entropy_eq: false # If the entropy should follow an equality constraint
@@ -183,16 +183,15 @@ params:
   sampler:
     type: TopErlSampler
     args:
-      env_id: "metaworld_ProDMP_TCE/pick-place-v2"
-      traj_downsample_factor: 5  # Make the sequence shorter and faster for transformer
+      env_id: "fancy_ProDMP_TCE/HopperJumpSparse-v0"
       dtype: *dtype
       device: *device
       seed: auto
-      task_specified_metrics: [ "success"]
+      task_specified_metrics: ["max_height", "goal_dist", "height_rew", "healthy_reward"]
 
   replay_buffer:
     type: TopErlReplayBuffer
     args:
-      buffer_size: 3000
+      buffer_size: 1000
       device: *device
       dtype: *dtype

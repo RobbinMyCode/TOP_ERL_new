@@ -39,6 +39,7 @@ params:
       episodes_per_test_env: 4
   reference_split:
     n_splits: 3
+    split_strategy: "fixed_sizes"
 
 grid:
   reference_split:

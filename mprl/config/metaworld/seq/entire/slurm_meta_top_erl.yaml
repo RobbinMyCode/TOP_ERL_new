@@ -1,7 +1,7 @@
 ---
 name: "SLURM"
 partition: "accelerated"
-job-name: "hopper_seq_entire"
+job-name: "metaworld_seq_entire"
 num_parallel_jobs: 120
 ntasks: 1
 cpus-per-task: 152
@@ -15,32 +15,39 @@ experiment_copy_src:
   - "../" # RL Code base
 experiment_copy_auto_dst: "../../CODE_COPY/"
 ---
-name: hopper_seq_entire
-import_path: "./shared_hopper.yaml"
-import_exp: "hopper_seq_entire"
+name: metaworld_seq_entire
+import_path: "./shared_meta_top_erl.yaml"
+import_exp: "metaworld_seq_entire"
 
 # cw2 config
 repetitions: 8      # Number of repetitions, each with different random seed, 4 for test, 20 for paper
 reps_per_job: 4
 reps_in_parallel: 4
-iterations: &iterations 15000
+iterations: &iterations 20000
 num_checkpoints: 1
 
 # Hardware specific parameters
 params:
-  sampler:
-    args:
-      num_env_train: 1
-      num_env_test: 38
-      episodes_per_train_env: 1
-      episodes_per_test_env: 4
   projection:
     args:
       total_train_steps: *iterations
-  reference_split:
-    n_splits: 3
-    split_strategy: "fixed_sizes"
+  sampler:
+    args:
+      num_env_train: 2
+      num_env_test: 38
+      episodes_per_train_env: 1
+      episodes_per_test_env: 4
 
 grid:
   reference_split:
-    ranges: [ [ 125, 75, 50 ] ]
+    n_splits: [2, 3, 4, 5, 6]
+  sampler:
+    args:
+      env_id:
+        [
+          "metaworld_ProDMP_TCE/assembly-v2",
+          "metaworld_ProDMP_TCE/hammer-v2",
+          "metaworld_ProDMP_TCE/button-press-v2",
+          "metaworld_ProDMP_TCE/disassemble-v2",
+          "metaworld_ProDMP_TCE/hand-insert-v2"
+        ]
