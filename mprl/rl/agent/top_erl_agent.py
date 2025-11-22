@@ -60,7 +60,7 @@ class TopErlAgent(AbstractAgent):
 
         #for running locally with smaller gpu (only required if whole traj are used)
         max_memory_GB = torch.cuda.get_device_properties(0).total_memory // (10**9)
-        self.max_paral = 3 if max_memory_GB <= 10 else 12
+        self.max_paral = 3 if max_memory_GB <= 10 else 4
 
     def get_optimizer(self, policy, critic):
         """
@@ -207,7 +207,8 @@ class TopErlAgent(AbstractAgent):
                     n_th_split_start += 1
 
             relevant_idx = 0 if pad_additional else -1
-            while idx_in_segments[-1, relevant_idx] >= self.traj_length:
+
+            while idx_in_segments[-1, relevant_idx] >= self.traj_length and len(idx_in_segments) > 1:
                 idx_in_segments = idx_in_segments[:-1]
             #TODO: THIS ONLY WORKS FOR IN POLICYUPDATE / QLOSS CORRECTLY --> makes strategy useless in v_func_est
             if "include_0" in self.reference_split_args["q_loss_strategy"] and not num_seg==1 and idx_in_segments[0,0]!=0:
