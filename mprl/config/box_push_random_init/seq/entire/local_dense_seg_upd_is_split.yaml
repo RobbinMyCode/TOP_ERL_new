@@ -22,3 +22,4 @@ params:
       total_train_steps: *iterations
 
   reference_split:
+    set_policy_update_init_cond_to_split_init: True
