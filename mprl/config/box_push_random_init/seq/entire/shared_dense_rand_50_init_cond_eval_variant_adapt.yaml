@@ -1,7 +1,7 @@
 # Global config
 exp_name: &exp_name "box_random_seq_entire"
 exp_path: &exp_path "../../mprl_exp_result"
-sub_exp_name: &sub_exp_name "test"
+sub_exp_name: &sub_exp_name "no_init_upd_rand_50_opt_split_adapt_eval_equal_(overc_critic_dtsetupd_policy)"
 act_func_hidden: &act_func_hidden leaky_relu
 act_func_last: &act_func_last null
 dtype: &dtype "float32"
@@ -99,7 +99,7 @@ params:
         #as_zero: every split will start at time index 0 --> each split starts at the current starting position [all steps after total step size get cut out]
           #-> goal parameter loses direct meaning as goal is not reachable in the used step size but would need last interval start+total_steps
 
-    split_strategy: "n_equal_splits" #n_equal_splits, random_size_range, random_gauss, fixed_sizes, fixed_size_rand_start, intra_episode_fixed_inter_rand_size  _rand_semi_fixed_size_focus_on_region
+    split_strategy: "fixed_size_rand_start" #n_equal_splits, random_size_range, random_gauss, fixed_sizes, random_size_range, intra_episode_fixed_inter_rand_size  _rand_semi_fixed_size_focus_on_region
     random_permute_splits: False #e.g. ranges = [12,15,36,0] -> permute that list every iteration before assignment, usable for ALL split_strategies
 
     n_splits: 3        #MOST IMPORTANT (for n_equal_splits): defines how many policy splits will be allowed, for rand variants defines how many splits will be saved (must be large enough to fit all splits, but should not be too large due to speed)
@@ -127,7 +127,7 @@ params:
     size_exception_for_first_and_last_split: True #only for size_range -> default true so that v + q func will be computed at all timesteps
     mean_std: [10,5]    #required for split_strategy "random_gauss"
 
-    q_loss_strategy: "enforce_no_overlap_trunc" #"truncated" #q-loss is updated via time-slices --> this determines how the time-sliced get cut for the update
+    q_loss_strategy: "overconfident" #"truncated" #q-loss is updated via time-slices --> this determines how the time-sliced get cut for the update
                                  #"truncated" --> one slice only for one parameter segment -> cut off parts that are not created with the same policy parameters
                                  #"start_unchanged" --> each slice has a startpoint from sampling saved in the replay buffer, with this sampling method
                                                       # bigger gaps between two consecutive segments which use different parameters may occur, but the policies start with "known startpoints"
@@ -142,8 +142,8 @@ params:
     evaluate_on_equal_splits: False #if True --> all evaluations are done with the corresponding n_equal_splits n_splits
 
     include_time_in_states: True #default True -> else get rid of all time infos instates
-    all_policy_updates_init_cond_identical: True  #exists to do default top-erl init cond ignoring splits
-    set_policy_update_init_cond_to_split_init: False #init conditions get mapped to last param initialization position -> true
+    all_policy_updates_init_cond_identical: True #exists to do default top-erl init cond ignoring splits
+    set_policy_update_init_cond_to_split_init: True #init conditions get mapped to last param initialization position -> true
     segments_equal_splits: False #update on non-random segments but ones that just equal the (policy-)splits
 
     policy_upd_init_cond_shift: 0

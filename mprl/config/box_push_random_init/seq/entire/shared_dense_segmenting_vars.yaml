@@ -142,7 +142,7 @@ params:
     evaluate_on_equal_splits: False #if True --> all evaluations are done with the corresponding n_equal_splits n_splits
 
     include_time_in_states: True #default True -> else get rid of all time infos instates
-    all_policy_updates_init_cond_identical: True #exists to do default top-erl init cond ignoring splits
+    all_policy_updates_init_cond_identical: True  #exists to do default top-erl init cond ignoring splits
     set_policy_update_init_cond_to_split_init: False #init conditions get mapped to last param initialization position -> true
     segments_equal_splits: False #update on non-random segments but ones that just equal the (policy-)splits
 
