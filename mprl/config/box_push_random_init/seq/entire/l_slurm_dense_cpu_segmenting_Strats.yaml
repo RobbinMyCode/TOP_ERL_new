@@ -6,7 +6,6 @@ num_parallel_jobs: 120
 ntasks: 1
 cpus-per-task: 152
 time: 4000 #600 for 10 hours
-gpus_per_rep: 0
 scheduler: horeka
 sbatch_args:
   gres: "gpu:4"
