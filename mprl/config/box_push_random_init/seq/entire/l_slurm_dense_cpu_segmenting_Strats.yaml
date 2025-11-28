@@ -7,8 +7,7 @@ ntasks: 1
 cpus-per-task: 152
 time: 4000 #600 for 10 hours
 scheduler: horeka
-sbatch_args:
-  gres: "gpu:4"
+
 
 experiment_copy_src:
   - "../" # RL Code base
